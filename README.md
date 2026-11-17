@@ -80,6 +80,7 @@ set -a && source .env && set +a
 - `PresentationSnapshots`는 문서와 이벤트 커서를 같은 시점에서 읽고 `ProjectEvents`는 커서 다음 이벤트를 순서대로 돌려준다
 - 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자와 편집 세션 식별자는 테스트가 만들어 넘긴다
 - 요청과 응답 형식은 `contracts` 폴더의 계약을 따른다
+- PPTX와 PDF 출력은 실험만 했다. 방법과 결과는 `experiments/export/README.md`에 있다
 
 ## CI
 
