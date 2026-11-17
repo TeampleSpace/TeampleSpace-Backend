@@ -27,8 +27,11 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation 'com.networknt:json-schema-validator:3.0.9'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// 계약 파일이 바뀌면 테스트를 다시 실행한다
+	inputs.dir('contracts')
 }
