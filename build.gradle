@@ -28,6 +28,9 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testImplementation 'com.networknt:json-schema-validator:3.0.9'
+	// 파일 출력 실험용. 내보내기 기능을 만들 때 운영 의존성으로 옮길지 정한다
+	testImplementation 'org.apache.poi:poi-ooxml:6.0.0'
+	testImplementation 'org.apache.pdfbox:pdfbox:3.0.8'
 }
 
 tasks.named('test') {
