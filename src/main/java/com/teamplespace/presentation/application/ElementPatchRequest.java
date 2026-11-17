@@ -12,7 +12,7 @@ import tools.jackson.databind.JsonNode;
 
 // contracts/schemas/api.schema.json의 ElementPatchRequest
 public record ElementPatchRequest(long generation, long baseVersion, UUID editGroupId, String clientMutationId,
-		Geometry geometry, JsonNode content, JsonNode style) {
+		boolean finalizeGroup, boolean hasPatch, Geometry geometry, JsonNode content, JsonNode style) {
 
 	public record Geometry(BigDecimal x, BigDecimal y, BigDecimal width, BigDecimal height, BigDecimal rotation,
 			int z) {
@@ -21,7 +21,7 @@ public record ElementPatchRequest(long generation, long baseVersion, UUID editGr
 	private static final Set<String> FIELDS = Set.of("generation", "baseVersion", "editGroupId", "clientMutationId",
 			"finalizeGroup", "patch");
 
-	// 출처 연결 수정과 묶음만 닫는 요청은 해당 기능을 만들 때 받는다
+	// 출처 연결 수정은 자료 기능을 만들 때 받는다
 	private static final Set<String> PATCH_FIELDS = Set.of("geometry", "content", "style");
 
 	private static final Set<String> GEOMETRY_FIELDS = Set.of("x", "y", "width", "height", "rotation", "z");
@@ -32,19 +32,29 @@ public record ElementPatchRequest(long generation, long baseVersion, UUID editGr
 
 	public static ElementPatchRequest parse(JsonNode body) {
 		requireObject(body, FIELDS);
+		JsonNode finalizeNode = body.get("finalizeGroup");
+		require(finalizeNode == null || finalizeNode.isBoolean());
+		boolean finalizeGroup = finalizeNode != null && finalizeNode.asBoolean();
+		String clientMutationId = string(body.get("clientMutationId"));
+		require(!clientMutationId.isEmpty() && clientMutationId.length() <= 64);
+		long generation = version(body.get("generation"));
+		long baseVersion = version(body.get("baseVersion"));
+		UUID editGroupId = uuid(body.get("editGroupId"));
 		JsonNode patch = body.get("patch");
+		if (patch == null) {
+			// 묶음만 닫는 요청은 patch를 생략할 수 있다
+			require(finalizeGroup);
+			return new ElementPatchRequest(generation, baseVersion, editGroupId, clientMutationId, true, false, null,
+					null, null);
+		}
 		requireObject(patch, PATCH_FIELDS);
 		require(!patch.isEmpty());
 		JsonNode content = patch.get("content");
 		JsonNode style = patch.get("style");
 		require(content == null || content.isObject());
 		require(style == null || style.isObject());
-		JsonNode finalizeGroup = body.get("finalizeGroup");
-		require(finalizeGroup == null || finalizeGroup.isBoolean());
-		String clientMutationId = string(body.get("clientMutationId"));
-		require(!clientMutationId.isEmpty() && clientMutationId.length() <= 64);
-		return new ElementPatchRequest(version(body.get("generation")), version(body.get("baseVersion")),
-				uuid(body.get("editGroupId")), clientMutationId, geometry(patch.get("geometry")), content, style);
+		return new ElementPatchRequest(generation, baseVersion, editGroupId, clientMutationId, finalizeGroup, true,
+				geometry(patch.get("geometry")), content, style);
 	}
 
 	private static Geometry geometry(JsonNode node) {
