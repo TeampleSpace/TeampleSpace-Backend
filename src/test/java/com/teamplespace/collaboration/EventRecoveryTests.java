@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -168,7 +170,7 @@ class EventRecoveryTests {
 		List<JsonNode> resumed = events.after(userB, projectId, received, 100).events();
 
 		assertThat(resumed).isNotEmpty();
-		assertThat(resumed).allMatch(event -> Long.parseLong(event.get("eventId").asString()) > Long.parseLong(received));
+		assertThat(resumed).noneMatch(event -> client.seen.contains(event.get("eventId").asString()));
 		client.receive(resumed);
 		int applied = client.applied;
 		// 이미 받은 이벤트가 다시 와도 한 번만 반영한다
@@ -187,7 +189,7 @@ class EventRecoveryTests {
 		List<JsonNode> delivered = new ArrayList<>(events.after(userB, projectId, "0", 100).events());
 		delivered.remove(2);
 
-		// 순번이 건너뛰면 그 뒤는 반영하지 않고 멈춘다
+		// 문서 버전이 건너뛰면 그 뒤는 반영하지 않고 멈춘다
 		client.receive(delivered);
 		assertThat(client.lastEventId).isEqualTo("2");
 
@@ -249,19 +251,25 @@ class EventRecoveryTests {
 		assertThat(service.patch(actor, fixture.slideId, element, "key-" + request, body).status()).isEqualTo(200);
 	}
 
-	// 프론트의 이벤트 반영 규칙을 흉내 낸 최소 클라이언트
+	// 계약의 이벤트 반영 규칙대로 움직이는 최소 클라이언트
+	// 이벤트 식별자는 같은지만 비교하고 빠진 변경은 문서 버전으로 알아챈다
 	static class Client {
 
 		final Map<String, String> texts = new HashMap<>();
 
 		final Map<String, Long> versions = new HashMap<>();
 
+		final Set<String> seen = new HashSet<>();
+
 		String lastEventId;
+
+		long presentationVersion;
 
 		int applied;
 
 		Client(Snapshot snapshot) {
 			lastEventId = snapshot.eventCursor();
+			presentationVersion = snapshot.presentation().get("version").asLong();
 			for (JsonNode slide : snapshot.presentation().get("slides")) {
 				for (JsonNode element : slide.get("elements")) {
 					put(element);
@@ -271,13 +279,17 @@ class EventRecoveryTests {
 
 		void receive(List<JsonNode> events) {
 			for (JsonNode event : events) {
-				long seq = Long.parseLong(event.get("eventId").asString());
-				long last = Long.parseLong(lastEventId);
-				if (seq <= last) {
+				String eventId = event.get("eventId").asString();
+				if (seen.contains(eventId)) {
 					continue;
 				}
-				if (seq != last + 1) {
-					return;
+				if (event.has("presentationVersion")) {
+					long version = event.get("presentationVersion").asLong();
+					if (version > presentationVersion + 1) {
+						// 중간 변경을 놓쳤으므로 여기서 멈추고 다시 받는다
+						return;
+					}
+					presentationVersion = Math.max(presentationVersion, version);
 				}
 				if (event.get("type").asString().equals("element.updated")) {
 					JsonNode element = event.get("payload").get("resource");
@@ -285,7 +297,8 @@ class EventRecoveryTests {
 						put(element);
 					}
 				}
-				lastEventId = event.get("eventId").asString();
+				seen.add(eventId);
+				lastEventId = eventId;
 				applied++;
 			}
 		}
