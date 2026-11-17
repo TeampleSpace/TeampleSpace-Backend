@@ -11,7 +11,8 @@ public enum ErrorCode {
 	IDEMPOTENCY_KEY_REQUIRED(400, false, "Idempotency-Key 헤더가 필요해요."),
 	FORBIDDEN(403, false, "권한이 없어요."),
 	NOT_FOUND(404, false, "대상을 찾을 수 없어요."),
-	VALIDATION_FAILED(422, false, "입력을 확인해 주세요.");
+	VALIDATION_FAILED(422, false, "입력을 확인해 주세요."),
+	INTERNAL_ERROR(500, false, "요청을 처리하지 못했어요.");
 
 	private final int httpStatus;
 
