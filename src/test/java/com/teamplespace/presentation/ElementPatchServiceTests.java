@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.List;
@@ -29,15 +30,16 @@ import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
 import com.teamplespace.platform.idempotency.IdempotencyStore;
 import com.teamplespace.platform.json.CanonicalJson;
+import com.teamplespace.platform.security.Actor;
 import com.teamplespace.presentation.application.ElementPatchService;
 import com.teamplespace.presentation.application.ElementPatchService.Result;
+import com.teamplespace.support.DocumentFixture;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 // 멱등 재시도, 버전 충돌, 원자적 저장을 실제 MySQL에서 확인
-// 운영 인증이 없으므로 사용자는 테스트가 만든 식별자다
 @SpringBootTest
 class ElementPatchServiceTests {
 
@@ -53,54 +55,33 @@ class ElementPatchServiceTests {
 	@Autowired
 	ObjectMapper json;
 
-	final UUID projectId = UUID.randomUUID();
+	DocumentFixture fixture;
 
-	final UUID presentationId = UUID.randomUUID();
+	UUID projectId;
 
-	final UUID slideId = UUID.randomUUID();
+	UUID presentationId;
 
-	final UUID elementA = UUID.randomUUID();
+	UUID slideId;
 
-	final UUID elementB = UUID.randomUUID();
+	UUID elementA;
 
-	final UUID userA = UUID.randomUUID();
+	UUID elementB;
 
-	final UUID userB = UUID.randomUUID();
+	Actor userA;
 
-	final UUID editGroup = UUID.randomUUID();
+	Actor userB;
 
 	@BeforeEach
 	void setUp() {
-		for (String table : List.of("idempotency_records", "project_events", "slide_elements", "slides",
-				"presentations", "project_memberships", "projects")) {
-			jdbc.sql("DELETE FROM " + table).update();
-		}
-		jdbc.sql("INSERT INTO projects (id, name) VALUES (UUID_TO_BIN(?), '검증용 프로젝트')")
-			.param(projectId.toString())
-			.update();
-		for (UUID user : List.of(userA, userB)) {
-			jdbc.sql("INSERT INTO project_memberships (project_id, user_id, state)"
-					+ " VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), 'active')")
-				.params(projectId.toString(), user.toString())
-				.update();
-		}
-		jdbc.sql("INSERT INTO presentations (id, project_id, schema_version, canvas_width, canvas_height, canvas_unit)"
-				+ " VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), 1, 1280, 720, 'px')")
-			.params(presentationId.toString(), projectId.toString())
-			.update();
-		jdbc.sql("INSERT INTO slides (id, project_id, presentation_id, generation, position)"
-				+ " VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), 1, 0)")
-			.params(slideId.toString(), projectId.toString(), presentationId.toString())
-			.update();
-		for (UUID element : List.of(elementA, elementB)) {
-			jdbc.sql("""
-					INSERT INTO slide_elements (id, project_id, slide_id, type, x, y, width, height, content, style)
-					VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), 'text', 80, 64, 620, 236.25,
-					        JSON_OBJECT('text', '처음 내용'),
-					        JSON_OBJECT('fontFamily', 'Pretendard', 'fontSize', 22, 'fontWeight', 400,
-					                    'color', '#1F2933', 'align', 'left', 'lineHeight', 1.6))
-					""").params(element.toString(), projectId.toString(), slideId.toString()).update();
-		}
+		fixture = new DocumentFixture(jdbc);
+		fixture.reset();
+		projectId = fixture.projectId;
+		presentationId = fixture.presentationId;
+		slideId = fixture.slideId;
+		elementA = fixture.elementA;
+		elementB = fixture.elementB;
+		userA = fixture.userA;
+		userB = fixture.userB;
 	}
 
 	@Test
@@ -115,7 +96,7 @@ class ElementPatchServiceTests {
 		assertThat(retry.replayed()).isTrue();
 		assertThat(CanonicalJson.write(retry.body())).isEqualTo(CanonicalJson.write(first.body()));
 		assertThat(elementVersion(elementA)).isEqualTo(2);
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 	}
 
 	@Test
@@ -126,7 +107,7 @@ class ElementPatchServiceTests {
 			.isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REUSED);
 		assertThat(elementVersion(elementA)).isEqualTo(2);
 		assertThat(text(elementA)).isEqualTo("첫 수정");
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 	}
 
 	@Test
@@ -147,7 +128,7 @@ class ElementPatchServiceTests {
 		assertThat(retry.replayed()).isTrue();
 		assertThat(CanonicalJson.write(retry.body())).isEqualTo(CanonicalJson.write(conflict.body()));
 		assertThat(text(elementA)).isEqualTo("첫 수정");
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 	}
 
 	@Test
@@ -164,7 +145,7 @@ class ElementPatchServiceTests {
 
 	@Test
 	void sameKeyStillBeingProcessedIsReportedAsInProgress() throws Exception {
-		IdempotencyStore.Key key = IdempotencyStore.Key.of(userA, "PATCH",
+		IdempotencyStore.Key key = IdempotencyStore.Key.of(userA.userId(), "PATCH",
 				"/v1/slides/" + slideId + "/elements/" + elementA, "key-1");
 		ObjectNode body = body(1, "mut-1", "첫 수정");
 		// 같은 키의 요청이 아직 커밋하지 않은 상태를 다른 연결로 만든다
@@ -212,7 +193,7 @@ class ElementPatchServiceTests {
 		assertThat(outcomes).contains(200);
 		assertThat(outcomes).allMatch(outcome -> outcome.equals(200) || outcome == ErrorCode.REQUEST_IN_PROGRESS);
 		assertThat(elementVersion(elementA)).isEqualTo(2);
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 	}
 
 	@Test
@@ -237,7 +218,7 @@ class ElementPatchServiceTests {
 		jdbc.sql("DELETE FROM project_events").update();
 		assertThat(patch(userA, elementA, "key-1", body(1, "mut-1", "첫 수정")).status()).isEqualTo(200);
 		assertThat(elementVersion(elementA)).isEqualTo(2);
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 		assertThat(count("idempotency_records")).isEqualTo(1);
 	}
 
@@ -250,7 +231,7 @@ class ElementPatchServiceTests {
 		Result winner = results.stream().filter(result -> result.status() == 200).findFirst().orElseThrow();
 		assertThat(elementVersion(elementA)).isEqualTo(2);
 		assertThat(text(elementA)).isEqualTo(winner.body().get("resource").get("content").get("text").asString());
-		assertThat(count("project_events")).isEqualTo(1);
+		assertThat(fixture.events("element.updated")).isEqualTo(1);
 	}
 
 	@Test
@@ -263,15 +244,16 @@ class ElementPatchServiceTests {
 		assertThat(elementVersion(elementB)).isEqualTo(2);
 		assertThat(version("slides", slideId)).isEqualTo(3);
 		assertThat(version("presentations", presentationId)).isEqualTo(3);
-		assertThat(eventSeq()).isEqualTo(2);
+		// 저장마다 묶음 생성과 요소 변경 이벤트가 하나씩 쌓인다
+		assertThat(eventSeq()).isEqualTo(4);
 		// 이벤트 순번과 문서 버전이 커밋 순서대로 함께 오른다
 		assertThat(results).extracting(result -> result.body().get("eventId").asString())
-			.containsExactlyInAnyOrder("1", "2");
+			.containsExactlyInAnyOrder("2", "4");
 		for (Result result : results) {
-			long seq = Long.parseLong(result.body().get("eventId").asString());
+			long order = Long.parseLong(result.body().get("eventId").asString()) / 2;
 			assertThat(result.body().get("elementVersion").asLong()).isEqualTo(2);
-			assertThat(result.body().get("slideVersion").asLong()).isEqualTo(seq + 1);
-			assertThat(result.body().get("presentationVersion").asLong()).isEqualTo(seq + 1);
+			assertThat(result.body().get("slideVersion").asLong()).isEqualTo(order + 1);
+			assertThat(result.body().get("presentationVersion").asLong()).isEqualTo(order + 1);
 		}
 	}
 
@@ -279,7 +261,7 @@ class ElementPatchServiceTests {
 	void removedMemberCannotReadOldResultWithSameKey() {
 		patch(userA, elementA, "key-1", body(1, "mut-1", "첫 수정"));
 		jdbc.sql("UPDATE project_memberships SET state = 'removed' WHERE user_id = UUID_TO_BIN(?)")
-			.param(userA.toString())
+			.param(userA.userId().toString())
 			.update();
 
 		assertThat(errorOf(() -> patch(userA, elementA, "key-1", body(1, "mut-1", "첫 수정"))))
@@ -296,14 +278,14 @@ class ElementPatchServiceTests {
 		assertThat(second.status()).isEqualTo(200);
 		assertThat(second.replayed()).isFalse();
 		assertThat(elementVersion(elementA)).isEqualTo(3);
-		assertThat(count("project_events")).isEqualTo(2);
+		assertThat(fixture.events("element.updated")).isEqualTo(2);
 	}
 
 	@Test
 	void requestsWithoutKeyOrAccessAreRejected() {
 		assertThat(errorOf(() -> patch(userA, elementA, " ", body(1, "mut-1", "첫 수정"))))
 			.isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
-		assertThat(errorOf(() -> patch(UUID.randomUUID(), elementA, "key-1", body(1, "mut-1", "첫 수정"))))
+		assertThat(errorOf(() -> patch(new Actor(UUID.randomUUID(), UUID.randomUUID()), elementA, "key-1", body(1, "mut-1", "첫 수정"))))
 			.isEqualTo(ErrorCode.FORBIDDEN);
 		assertThat(errorOf(() -> patch(userA, UUID.randomUUID(), "key-1", body(1, "mut-1", "첫 수정"))))
 			.isEqualTo(ErrorCode.NOT_FOUND);
@@ -327,21 +309,23 @@ class ElementPatchServiceTests {
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/MutationResponse", success.body().toString()))
 			.isEmpty();
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ErrorResponse", conflict.toString())).isEmpty();
-		String payload = jdbc.sql("SELECT CAST(payload AS CHAR) FROM project_events WHERE seq = 1")
+		String payload = jdbc
+			.sql("SELECT CAST(payload AS CHAR) FROM project_events WHERE type = 'element.updated' ORDER BY seq LIMIT 1")
 			.query(String.class)
 			.single();
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/DocumentChange", payload)).isEmpty();
 	}
 
-	Result patch(UUID actor, UUID element, String key, JsonNode body) {
+	Result patch(Actor actor, UUID element, String key, JsonNode body) {
 		return service.patch(actor, slideId, element, key, body);
 	}
 
+	// 변경 식별자가 같으면 같은 편집 묶음으로 본다
 	ObjectNode body(long baseVersion, String mutationId, String text) {
 		ObjectNode body = json.createObjectNode();
 		body.put("generation", 1);
 		body.put("baseVersion", baseVersion);
-		body.put("editGroupId", editGroup.toString());
+		body.put("editGroupId", UUID.nameUUIDFromBytes(mutationId.getBytes(StandardCharsets.UTF_8)).toString());
 		body.put("clientMutationId", mutationId);
 		body.putObject("patch").putObject("content").put("text", text);
 		return body;
@@ -372,32 +356,23 @@ class ElementPatchServiceTests {
 	}
 
 	long elementVersion(UUID element) {
-		return version("slide_elements", element);
+		return fixture.version("slide_elements", element);
 	}
 
 	long version(String table, UUID id) {
-		return jdbc.sql("SELECT version FROM " + table + " WHERE id = UUID_TO_BIN(?)")
-			.param(id.toString())
-			.query(Long.class)
-			.single();
+		return fixture.version(table, id);
 	}
 
 	String text(UUID element) {
-		return jdbc.sql("SELECT content ->> '$.text' FROM slide_elements WHERE id = UUID_TO_BIN(?)")
-			.param(element.toString())
-			.query(String.class)
-			.single();
+		return fixture.text(element);
 	}
 
 	long eventSeq() {
-		return jdbc.sql("SELECT event_seq FROM projects WHERE id = UUID_TO_BIN(?)")
-			.param(projectId.toString())
-			.query(Long.class)
-			.single();
+		return fixture.eventSeq();
 	}
 
 	int count(String table) {
-		return jdbc.sql("SELECT COUNT(*) FROM " + table).query(Integer.class).single();
+		return fixture.count(table);
 	}
 
 }
