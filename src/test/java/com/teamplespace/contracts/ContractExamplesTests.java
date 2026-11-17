@@ -3,7 +3,6 @@ package com.teamplespace.contracts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -17,11 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
 import com.networknt.schema.Error;
-import com.networknt.schema.InputFormat;
-import com.networknt.schema.Schema;
-import com.networknt.schema.SchemaLocation;
-import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.SpecificationVersion;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -29,17 +23,10 @@ import tools.jackson.databind.ObjectMapper;
 // contracts 폴더의 예제가 스키마와 맞는지 확인
 class ContractExamplesTests {
 
-	static final Path CONTRACTS = Path.of("contracts");
-	static final Path SCHEMAS = CONTRACTS.resolve("schemas");
+	static final Path CONTRACTS = ContractSchemas.CONTRACTS;
 	static final Path EXAMPLES = CONTRACTS.resolve("examples");
 
 	final ObjectMapper json = new ObjectMapper();
-	// 저장소 경로와 무관하게 스키마 파일 이름으로만 찾는다
-	static final String BASE = "contracts:/";
-
-	final SchemaRegistry registry = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12,
-			builder -> builder.schemas(iri -> iri.startsWith(BASE) ? read(SCHEMAS.resolve(iri.substring(BASE.length()))) : null));
-
 	@TestFactory
 	Stream<DynamicTest> examplesMatchManifest() throws IOException {
 		JsonNode manifest = json.readTree(Files.readString(EXAMPLES.resolve("manifest.json")));
@@ -49,7 +36,7 @@ class ContractExamplesTests {
 			String schemaRef = entry.get("schema").asString();
 			boolean valid = entry.get("valid").asBoolean();
 			tests.add(DynamicTest.dynamicTest(example, () -> {
-				List<Error> errors = validate(schemaRef, Files.readString(EXAMPLES.resolve(example)));
+				List<Error> errors = ContractSchemas.validate(schemaRef, Files.readString(EXAMPLES.resolve(example)));
 				if (valid) {
 					assertThat(errors).as(example).isEmpty();
 				}
@@ -115,20 +102,6 @@ class ContractExamplesTests {
 				String code = json.readTree(Files.readString(file)).get("error").get("code").asString();
 				assertThat(codes).as(file.getFileName().toString()).contains(code);
 			}
-		}
-	}
-
-	List<Error> validate(String schemaRef, String input) {
-		Schema schema = registry.getSchema(SchemaLocation.of(BASE + schemaRef));
-		return schema.validate(input, InputFormat.JSON);
-	}
-
-	static String read(Path path) {
-		try {
-			return Files.readString(path);
-		}
-		catch (IOException ex) {
-			throw new UncheckedIOException(ex);
 		}
 	}
 
