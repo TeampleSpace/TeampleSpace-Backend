@@ -75,8 +75,10 @@ set -a && source .env && set +a
 
 ## 현재 구현 범위
 
-- 요소 수정 저장 경로는 `ElementPatchService`에 있다. 문서 변경, 이벤트, 멱등 결과를 한 트랜잭션으로 저장한다
-- 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자 식별자는 테스트가 만들어 넘긴다
+- 요소 수정 저장 경로는 `ElementPatchService`에 있다. 문서 변경, 변경 이력, 이벤트, 멱등 결과를 한 트랜잭션으로 저장한다
+- 연속 저장은 `ChangeGroups`가 하나의 변경으로 묶는다. 2초 동안 입력이 없거나 30초가 지나면 닫으며 값은 `teamplespace.edit-group.idle-timeout`, `teamplespace.edit-group.max-duration`으로 바꿀 수 있다
+- `PresentationSnapshots`는 문서와 이벤트 커서를 같은 시점에서 읽고 `ProjectEvents`는 커서 다음 이벤트를 순서대로 돌려준다
+- 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자와 편집 세션 식별자는 테스트가 만들어 넘긴다
 - 요청과 응답 형식은 `contracts` 폴더의 계약을 따른다
 
 ## CI
