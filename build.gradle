@@ -35,6 +35,7 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
-	// 계약 파일이 바뀌면 테스트를 다시 실행한다
+	// 계약 파일이나 출력 실험 산출물이 바뀌면 테스트를 다시 실행한다
 	inputs.dir('contracts')
+	inputs.dir('experiments/export/output')
 }

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import com.teamplespace.contracts.ContractSchemas;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -42,6 +43,8 @@ class ExportExperimentTests {
 	static final Path EXAMPLES = ContractSchemas.CONTRACTS.resolve("examples");
 
 	static final Path OUTPUT = Path.of("build", "export-experiment");
+
+	static final Path COMMITTED = Path.of("experiments", "export", "output");
 
 	@Test
 	void sharedExampleBecomesPptxAndPdf() throws Exception {
@@ -121,6 +124,36 @@ class ExportExperimentTests {
 		PDFRenderer renderer = new PDFRenderer(pdf);
 		for (int i = 0; i < pdf.getNumberOfPages(); i++) {
 			ImageIO.write(renderer.renderImageWithDPI(i, 96), "png", OUTPUT.resolve(prefix + (i + 1) + ".png").toFile());
+		}
+	}
+
+	// 저장소에 남긴 산출물이 지금의 문서 예제에서 나온 것인지 확인한다. 글꼴이 없어도 실행된다
+	@Test
+	void committedOutputsContainTheSharedExampleText() throws Exception {
+		JsonNode presentation = new ObjectMapper().readTree(Files.readString(EXAMPLES.resolve("presentation.json")));
+		List<String> texts = new ArrayList<>();
+		for (JsonNode slide : presentation.get("slides")) {
+			for (JsonNode element : slide.get("elements")) {
+				if (element.get("type").asString().equals("text")) {
+					texts.add(element.get("content").get("text").asString());
+				}
+			}
+		}
+		assertThat(texts).isNotEmpty();
+		int slides = presentation.get("slideIds").size();
+
+		try (InputStream in = Files.newInputStream(COMMITTED.resolve("presentation.pptx"));
+				XMLSlideShow pptx = new XMLSlideShow(in)) {
+			assertThat(pptx.getSlides()).hasSize(slides);
+			assertThat(text(pptx)).contains(texts);
+		}
+		try (PDDocument pdf = Loader.loadPDF(COMMITTED.resolve("presentation.pdf").toFile())) {
+			assertThat(pdf.getNumberOfPages()).isEqualTo(slides);
+			// PDF는 줄을 직접 나누므로 공백과 줄바꿈을 빼고 견준다
+			String compact = new PDFTextStripper().getText(pdf).replaceAll("\\s", "");
+			for (String expected : texts) {
+				assertThat(compact).contains(expected.replaceAll("\\s", ""));
+			}
 		}
 	}
 
