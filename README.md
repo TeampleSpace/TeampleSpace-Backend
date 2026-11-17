@@ -73,6 +73,12 @@ set -a && source .env && set +a
 - 이미 적용된 파일은 고치지 않고 새 파일을 추가한다
 - 테이블은 기능을 개발하는 단계에서 필요한 만큼만 추가한다
 
+## 현재 구현 범위
+
+- 요소 수정 저장 경로는 `ElementPatchService`에 있다. 문서 변경, 이벤트, 멱등 결과를 한 트랜잭션으로 저장한다
+- 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자 식별자는 테스트가 만들어 넘긴다
+- 요청과 응답 형식은 `contracts` 폴더의 계약을 따른다
+
 ## CI
 
 `.github/workflows/ci.yml`이 PR과 기본 브랜치 푸시마다 `compose.yaml`의 MySQL 8.4를 띄우고 `./gradlew build`로 빌드와 테스트를 실행한다.

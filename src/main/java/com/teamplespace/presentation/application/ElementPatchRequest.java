@@ -1,0 +1,106 @@
+package com.teamplespace.presentation.application;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Set;
+import java.util.UUID;
+
+import com.teamplespace.platform.error.ApiException;
+import com.teamplespace.platform.error.ErrorCode;
+
+import tools.jackson.databind.JsonNode;
+
+// contracts/schemas/api.schema.json의 ElementPatchRequest
+public record ElementPatchRequest(long generation, long baseVersion, UUID editGroupId, String clientMutationId,
+		Geometry geometry, JsonNode content, JsonNode style) {
+
+	public record Geometry(BigDecimal x, BigDecimal y, BigDecimal width, BigDecimal height, BigDecimal rotation,
+			int z) {
+	}
+
+	private static final Set<String> FIELDS = Set.of("generation", "baseVersion", "editGroupId", "clientMutationId",
+			"finalizeGroup", "patch");
+
+	// 출처 연결 수정과 묶음만 닫는 요청은 해당 기능을 만들 때 받는다
+	private static final Set<String> PATCH_FIELDS = Set.of("geometry", "content", "style");
+
+	private static final Set<String> GEOMETRY_FIELDS = Set.of("x", "y", "width", "height", "rotation", "z");
+
+	private static final BigDecimal COORDINATE_LIMIT = new BigDecimal("100000000");
+
+	private static final BigDecimal ROTATION_LIMIT = new BigDecimal("10000");
+
+	public static ElementPatchRequest parse(JsonNode body) {
+		requireObject(body, FIELDS);
+		JsonNode patch = body.get("patch");
+		requireObject(patch, PATCH_FIELDS);
+		require(!patch.isEmpty());
+		JsonNode content = patch.get("content");
+		JsonNode style = patch.get("style");
+		require(content == null || content.isObject());
+		require(style == null || style.isObject());
+		JsonNode finalizeGroup = body.get("finalizeGroup");
+		require(finalizeGroup == null || finalizeGroup.isBoolean());
+		String clientMutationId = string(body.get("clientMutationId"));
+		require(!clientMutationId.isEmpty() && clientMutationId.length() <= 64);
+		return new ElementPatchRequest(version(body.get("generation")), version(body.get("baseVersion")),
+				uuid(body.get("editGroupId")), clientMutationId, geometry(patch.get("geometry")), content, style);
+	}
+
+	private static Geometry geometry(JsonNode node) {
+		if (node == null) {
+			return null;
+		}
+		requireObject(node, GEOMETRY_FIELDS);
+		require(node.size() == GEOMETRY_FIELDS.size());
+		JsonNode z = node.get("z");
+		require(z.isIntegralNumber() && z.canConvertToInt());
+		Geometry geometry = new Geometry(decimal(node.get("x"), COORDINATE_LIMIT),
+				decimal(node.get("y"), COORDINATE_LIMIT), decimal(node.get("width"), COORDINATE_LIMIT),
+				decimal(node.get("height"), COORDINATE_LIMIT), decimal(node.get("rotation"), ROTATION_LIMIT),
+				z.asInt());
+		require(geometry.width().signum() > 0 && geometry.height().signum() > 0);
+		return geometry;
+	}
+
+	// DB와 같은 소수 넷째 자리로 맞춘다
+	private static BigDecimal decimal(JsonNode node, BigDecimal limit) {
+		require(node != null && node.isNumber());
+		BigDecimal value = node.decimalValue().setScale(4, RoundingMode.HALF_UP);
+		require(value.abs().compareTo(limit) < 0);
+		return value;
+	}
+
+	private static long version(JsonNode node) {
+		require(node != null && node.isIntegralNumber() && node.canConvertToLong());
+		long value = node.asLong();
+		require(value >= 1 && value <= 9007199254740991L);
+		return value;
+	}
+
+	private static UUID uuid(JsonNode node) {
+		try {
+			return UUID.fromString(string(node));
+		}
+		catch (IllegalArgumentException ex) {
+			throw new ApiException(ErrorCode.VALIDATION_FAILED);
+		}
+	}
+
+	private static String string(JsonNode node) {
+		require(node != null && node.isString());
+		return node.asString();
+	}
+
+	private static void requireObject(JsonNode node, Set<String> allowed) {
+		require(node != null && node.isObject());
+		node.properties().forEach(entry -> require(allowed.contains(entry.getKey())));
+	}
+
+	private static void require(boolean condition) {
+		if (!condition) {
+			throw new ApiException(ErrorCode.VALIDATION_FAILED);
+		}
+	}
+
+}
