@@ -18,7 +18,8 @@
 
 Java 21에서 운영 코드와 테스트 코드의 직접 컴파일을 통과했다
 로컬 실행 환경의 Java 포트 열기 제한으로 Gradle과 HTTP 서버 테스트는 실행하지 못했다
-GitHub Actions의 MySQL 8.4 환경에서 빌드와 전체 테스트 결과를 확인한다
+구현 커밋 0ee2852의 GitHub Actions에서 MySQL 8.4 빌드와 전체 테스트를 통과했다
+실행 기록: https://github.com/TeampleSpace/TeampleSpace-Backend/actions/runs/44259341379
 
 실제 HTTP 요청을 쓰는 통합 테스트는 다음을 확인한다
 
