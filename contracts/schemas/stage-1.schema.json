@@ -74,6 +74,9 @@
         },
         "version": {
           "$ref": "api.schema.json#/$defs/Version"
+        },
+        "canEmailReauth": {
+          "type": "boolean"
         }
       }
     },
