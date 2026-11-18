@@ -190,6 +190,34 @@ class AuthIntegrationTests {
 		assertCode(browser.send(get("/v1/auth/oauth/google/authorize").param("purpose","reauth"),null),401,"REAUTH_REQUIRED");
 	}
 
+	@Test void verifiedGoogleEmailCanReauthenticateWithoutAddingEmailLogin() throws Exception {
+		var browser=new Browser();
+		var request=new org.springframework.mock.web.MockHttpServletRequest();request.setCookies(browser.cookie);
+		var response=new MockHttpServletResponse();
+		auth.login(auth.session(request),"google",UUID.randomUUID().toString(),browser.email,response);
+		browser.cookie=response.getCookie(AuthService.COOKIE);browser.bootstrap();
+		var user=body(browser.send(get("/v1/me"),null));
+		assertThat(user.get("canEmailReauth").asBoolean()).isTrue();
+		assertCode(browser.send(post("/v1/auth/challenges"),Map.of("email",UUID.randomUUID()+"@example.test","purpose","reauth")),401,"REAUTH_REQUIRED");
+		String challenge=browser.challenge("reauth");
+		var proof=browser.send(post("/v1/auth/reauthentications"),Map.of("challengeId",challenge,"code",codes.get(browser.email)));
+		assertThat(proof.getStatus()).isEqualTo(201);
+		assertThat(body(proof).get("reauthProof").asString()).isNotBlank();
+		assertThat(jdbc.sql("SELECT provider FROM auth_identities WHERE user_id=UUID_TO_BIN(?)")
+			.param(user.get("id").asString()).query(String.class).list()).containsExactly("google");
+	}
+
+	@Test void unverifiedNaverEmailCannotBeUsedForEmailReauthentication() throws Exception {
+		var browser=new Browser();
+		var request=new org.springframework.mock.web.MockHttpServletRequest();request.setCookies(browser.cookie);
+		var response=new MockHttpServletResponse();
+		auth.login(auth.session(request),"naver",UUID.randomUUID().toString(),browser.email,response);
+		browser.cookie=response.getCookie(AuthService.COOKIE);browser.bootstrap();
+		assertThat(body(browser.send(get("/v1/me"),null)).get("canEmailReauth").asBoolean()).isFalse();
+		assertCode(browser.send(post("/v1/auth/challenges"),Map.of("email",browser.email,"purpose","reauth")),401,"REAUTH_REQUIRED");
+		assertThat(codes).doesNotContainKey(browser.email);
+	}
+
 	@Test void unsafeOAuthReturnToIsRejected() throws Exception {
 		var browser=new Browser();
 		for(String target:new String[]{"https://evil.example","//evil.example","/\\evil","/%2f%2fevil","/account?next=https://evil.example"}) {
