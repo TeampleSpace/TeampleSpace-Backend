@@ -108,13 +108,14 @@ public class WorkspaceService {
 
 	@Transactional
 	public Map<String,Object> remove(UUID actor,UUID id,UUID target,RemoveMember input,String keyValue) {
-		lockUsers(actor,target);lockProject(id);
+		var lockedUsers=lockUserRows(actor,target);requireReadyUser(lockedUsers.get(actor));lockProject(id);
 		Map<String,Object> project=project(id);
 		boolean self=actor.equals(target);
 		if(!self)owner(actor,id);
 		var key=key(actor,"DELETE","/v1/projects/"+id+"/members/"+target,keyValue);
 		var stored=idempotency.findOrClaim(key,CanonicalJson.sha256(json.valueToTree(input)));
 		if(stored.isPresent())return read(stored.get().body());
+		requireReadyUser(lockedUsers.get(target));
 		access(actor,id);
 		if(project.get("ownerId").equals(target.toString()))throw new ApiException(ErrorCode.OWNER_TRANSFER_REQUIRED);
 		var member=jdbc.sql("SELECT state,version FROM project_memberships WHERE project_id=UUID_TO_BIN(?) AND user_id=UUID_TO_BIN(?)")
@@ -211,13 +212,21 @@ public class WorkspaceService {
 	private void owner(UUID actor,UUID id) { access(actor,id);if(!project(id).get("ownerId").equals(actor.toString()))throw new ApiException(ErrorCode.FORBIDDEN); }
 	private void version(UUID id,Long expected) { if(expected==null||expected<1)throw new ApiException(ErrorCode.VALIDATION_FAILED);if(((Number)project(id).get("version")).longValue()!=expected)throw new ApiException(ErrorCode.VERSION_CONFLICT); }
 	private void lockProject(UUID id) { jdbc.sql("SELECT id FROM projects WHERE id=UUID_TO_BIN(?) AND status='active' FOR UPDATE").param(id.toString()).query().listOfRows().stream().findFirst().orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND)); }
-	private void lockUsers(UUID...ids) {
+	private void lockUsers(UUID...ids) { lockUserRows(ids).values().forEach(this::requireReadyUser); }
+	private Map<UUID,Map<String,Object>> lockUserRows(UUID...ids) {
+		Map<UUID,Map<String,Object>> users=new LinkedHashMap<>();
 		for(UUID id:List.of(ids).stream().distinct().sorted(Comparator.comparing(UUID::toString)).toList()) {
-			var row=jdbc.sql("SELECT status,onboarding_status FROM users WHERE id=UUID_TO_BIN(?) FOR UPDATE").param(id.toString()).query().listOfRows().stream().findFirst().orElseThrow(()->new ApiException(ErrorCode.MEMBER_NOT_ACTIVE));
-			if(!row.get("status").equals("active"))throw new ApiException(ErrorCode.MEMBER_NOT_ACTIVE);
-			if(!row.get("onboarding_status").equals("completed"))throw new ApiException(ErrorCode.ONBOARDING_REQUIRED);
+			var row=jdbc.sql("SELECT status,onboarding_status FROM users WHERE id=UUID_TO_BIN(?) FOR UPDATE")
+				.param(id.toString()).query().listOfRows().stream().findFirst().orElse(Map.of());
+			users.put(id,row);
 		}
+		return users;
 	}
+	private void requireReadyUser(Map<String,Object> row) {
+		if(!"active".equals(row.get("status")))throw new ApiException(ErrorCode.MEMBER_NOT_ACTIVE);
+		if(!"completed".equals(row.get("onboarding_status")))throw new ApiException(ErrorCode.ONBOARDING_REQUIRED);
+	}
+
 	private IdempotencyStore.Key key(UUID actor,String method,String path,String value) { if(value==null||value.isBlank()||value.length()>128)throw new ApiException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);return IdempotencyStore.Key.of(actor,method,path,value); }
 	private void validateName(String value) { if(value==null||value.isBlank()||value.length()>255)throw new ApiException(ErrorCode.VALIDATION_FAILED); }
 	private void validateOptional(String value,int max) { if(value!=null&&value.length()>max)throw new ApiException(ErrorCode.VALIDATION_FAILED); }

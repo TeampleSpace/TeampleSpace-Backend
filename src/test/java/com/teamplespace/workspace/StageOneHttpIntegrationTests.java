@@ -40,6 +40,7 @@ import tools.jackson.databind.ObjectMapper;
 })
 class StageOneHttpIntegrationTests {
     @LocalServerPort int port;
+    @org.springframework.beans.factory.annotation.Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
     @MockitoBean ChallengeMail mail;
     private final ObjectMapper json = new ObjectMapper();
     private final Map<String, String> codes = new ConcurrentHashMap<>();
@@ -57,6 +58,7 @@ class StageOneHttpIntegrationTests {
         private final HttpClient client = HttpClient.newBuilder().cookieHandler(cookies)
                 .connectTimeout(Duration.ofSeconds(5)).build();
         private String csrf;
+        private String email;
 
         JsonNode request(String method, String path, Object body, int expectedStatus, String key) throws Exception {
             var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/v1" + path))
@@ -88,7 +90,7 @@ class StageOneHttpIntegrationTests {
 
         JsonNode signup(String name) throws Exception {
             bootstrap();
-            String email = UUID.randomUUID() + "@example.test";
+            email = UUID.randomUUID() + "@example.test";
             JsonNode challenge = request("POST", "/auth/challenges", Map.of("email", email, "purpose", "login"), 202);
             String oldCookie = cookies.getCookieStore().getCookies().getFirst().getValue();
             JsonNode login = request("POST", "/auth/sessions", Map.of("challengeId", challenge.get("challengeId").asString(), "code", codes.get(email)), 201);
@@ -173,6 +175,30 @@ class StageOneHttpIntegrationTests {
         owner.bootstrap();
         owner.request("GET", "/projects/" + id, null, 403);
         assertThat(member.request("GET", "/projects/" + id, null, 200).get("memberCount").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void removingDeletedMemberReplaysSuccessWithoutRequiringTargetAccount() throws Exception {
+        Browser owner = new Browser();
+        Browser member = new Browser();
+        Browser stranger = new Browser();
+        owner.signup("소유자");
+        String target = member.signup("탈퇴할 팀원").get("id").asString();
+        stranger.signup("외부 사용자");
+        String id = owner.request("POST", "/projects", Map.of("name", "제거 재시도"), 201, UUID.randomUUID().toString()).get("id").asString();
+        String token = invitationToken(owner.request("POST", "/projects/" + id + "/invitations", Map.of("rotate", false), 200));
+        member.request("POST", "/invitations/" + token + "/accept", null, 200);
+        String key = UUID.randomUUID().toString();
+        Map<String, Object> command = Map.of("expectedMembershipVersion", memberVersion(owner, id, target), "clientMutationId", UUID.randomUUID().toString());
+        String route = "/projects/" + id + "/members/" + target;
+        JsonNode removed = owner.request("DELETE", route, command, 200, key);
+        jdbc.sql("UPDATE auth_challenges SET created_at=UTC_TIMESTAMP(6)-INTERVAL 61 SECOND WHERE email_normalized=?").param(member.email).update();
+        JsonNode challenge = member.request("POST", "/auth/challenges", Map.of("email", member.email, "purpose", "reauth"), 202);
+        JsonNode proof = member.request("POST", "/auth/reauthentications", Map.of("challengeId", challenge.get("challengeId").asString(), "code", codes.get(member.email)), 201);
+        member.request("DELETE", "/me", Map.of("reauthProof", proof.get("reauthProof").asString(), "confirmationText", "탈퇴"), 202);
+        JsonNode replay = owner.request("DELETE", route, command, 200, key);
+        assertThat(replay).isEqualTo(removed);
+        stranger.request("DELETE", route, command, 404, key);
     }
 
     @Test
