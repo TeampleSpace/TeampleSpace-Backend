@@ -24,12 +24,13 @@
 - consentVersions는 약관 type을 키로, 수락한 version을 값으로 갖는 객체다
 - identities는 provider, maskedEmail, linkedAt을 가진다. 제공자 subject와 토큰은 공개하지 않는다
 - bootstrap의 사용자 요약은 기존 displayName 필드를 유지한다
-- authProviders는 provider와 enabled를 가진 배열이며 email, kakao, naver, google을 포함한다
+- authProviders는 provider, enabled, reauthEnabled를 가진 배열이며 email, kakao, naver, google을 포함한다
 - 필수 약관은 terms와 privacy다. 유효한 문서 URL과 버전이 없으면 가입 완료를 거절한다
 - 모든 쓰기는 bootstrap이 발급한 쿠키와 X-CSRF-Token이 필요하다. Origin은 서버에 설정한 프론트 주소와 일치해야 한다
 - 로그인과 로그아웃으로 세션이 바뀐 뒤 bootstrap을 다시 읽는다
 - 소셜 로그인 성공 후 신규 사용자는 /onboarding, 기존 사용자는 검증한 returnTo 또는 /로 이동한다
 - 소셜 실패는 /auth/error?code=내부오류코드, 재인증 완료는 /account#reauthProof=일회증명으로 이동한다
+- Google 소셜 재인증은 지원하지 않아 reauthEnabled가 false다. 검증된 계정 이메일이 있으면 이메일 코드로 재인증할 수 있다
 - 실제 메일과 제공자 설정이 없으면 기능을 비활성으로 알리고 요청은 거절한다
 
 ## 프로젝트와 팀

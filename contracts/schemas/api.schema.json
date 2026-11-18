@@ -316,7 +316,7 @@
       ],
       "properties": {
         "configVersion": { "type": "string", "minLength": 1 },
-        "authProviders": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["provider", "enabled"], "properties": {"provider": {"enum": ["email", "kakao", "naver", "google"]}, "enabled": {"type": "boolean"}}}},
+        "authProviders": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["provider", "enabled"], "properties": {"provider": {"enum": ["email", "kakao", "naver", "google"]}, "enabled": {"type": "boolean"}, "reauthEnabled": {"type": "boolean"}}}},
         "policyRevision": { "type": "string", "minLength": 1 },
         "uploadTypes": {
           "type": "array",
