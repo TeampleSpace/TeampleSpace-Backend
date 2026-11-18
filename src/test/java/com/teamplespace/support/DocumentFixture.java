@@ -7,7 +7,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.teamplespace.platform.security.Actor;
 
-// 저장 검증용 최소 문서. 운영 인증이 없어 사용자와 편집 세션은 테스트가 만든 식별자다
+// 저장 검증용 사용자와 문서
 public class DocumentFixture {
 
 	public final UUID projectId = UUID.randomUUID();
@@ -31,7 +31,7 @@ public class DocumentFixture {
 	}
 
 	public void reset() {
-		for (String table : List.of("idempotency_records", "change_targets", "document_changes", "project_events",
+		for (String table : List.of("project_invitations", "idempotency_records", "change_targets", "document_changes", "project_events",
 				"slide_elements", "slides", "presentations", "project_memberships", "projects")) {
 			jdbc.sql("DELETE FROM " + table).update();
 		}
@@ -39,6 +39,8 @@ public class DocumentFixture {
 			.param(projectId.toString())
 			.update();
 		for (Actor user : List.of(userA, userB)) {
+			jdbc.sql("INSERT INTO users(id,onboarding_status) VALUES(UUID_TO_BIN(?),'completed') ON DUPLICATE KEY UPDATE status='active'")
+				.param(user.userId().toString()).update();
 			jdbc.sql("INSERT INTO project_memberships (project_id, user_id, state)"
 					+ " VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), 'active')")
 				.params(projectId.toString(), user.userId().toString())
