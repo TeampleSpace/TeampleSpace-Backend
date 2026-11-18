@@ -118,3 +118,11 @@ set -a && source .env && set +a
 네이버는 auth_type=reauthenticate를 사용한다
 Google은 계정 재인증 요청을 지원하지 않아 소셜 재인증 진입을 거절한다
 Google이 확인한 이메일이 있으면 해당 계정과 세션에 결합한 이메일 코드로 본인 확인할 수 있다. 이메일 로그인 수단을 새로 연결하지 않는다
+
+재인증 요청 근거는 각 제공자의 공식 문서를 따른다
+- Google 계정 재인증 요청 미지원: https://developers.google.com/identity/siwg/security-bundle
+- 카카오 재인증 요청과 인앱 제한: https://developers.kakao.com/docs/ko/kakaologin/rest-api
+- 네이버 재인증: https://developers.naver.com/docs/login/devguide/devguide.md
+
+사용자 응답의 canEmailReauth가 true인 경우에만 계정에 이미 검증된 이메일로 본인 확인할 수 있다
+네이버 프로필 이메일은 별도 검증 여부를 제공하지 않으므로 이메일 재인증에 사용하지 않는다

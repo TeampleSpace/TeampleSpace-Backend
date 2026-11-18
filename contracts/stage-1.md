@@ -19,7 +19,7 @@
 | GET /v1/auth/oauth/{provider}/authorize | purpose와 returnTo 쿼리 | 302 제공자 주소 |
 | GET /v1/auth/oauth/{provider}/callback | code 또는 error와 state 쿼리 | 303 내부 복귀 주소 |
 
-- User는 id, name, email, consentVersions, ownedProjectCount, onboardingStatus, identities, version을 가진다
+- User는 id, name, email, consentVersions, ownedProjectCount, onboardingStatus, identities, version, canEmailReauth를 가진다
 - onboardingStatus는 pending 또는 completed다
 - consentVersions는 약관 type을 키로, 수락한 version을 값으로 갖는 객체다
 - identities는 provider, maskedEmail, linkedAt을 가진다. 제공자 subject와 토큰은 공개하지 않는다
@@ -30,6 +30,7 @@
 - 로그인과 로그아웃으로 세션이 바뀐 뒤 bootstrap을 다시 읽는다
 - 소셜 로그인 성공 후 신규 사용자는 /onboarding, 기존 사용자는 검증한 returnTo 또는 /로 이동한다
 - 소셜 실패는 /auth/error?code=내부오류코드, 재인증 완료는 /account#reauthProof=일회증명으로 이동한다
+- canEmailReauth가 true일 때만 현재 계정 이메일로 재인증을 요청한다. 네이버 이메일은 검증된 주소로 간주하지 않는다
 - Google 소셜 재인증은 지원하지 않아 reauthEnabled가 false다. 검증된 계정 이메일이 있으면 이메일 코드로 재인증할 수 있다
 - 실제 메일과 제공자 설정이 없으면 기능을 비활성으로 알리고 요청은 거절한다
 

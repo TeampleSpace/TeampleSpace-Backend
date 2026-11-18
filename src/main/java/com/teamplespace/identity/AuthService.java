@@ -190,7 +190,7 @@ public class AuthService {
 			try {
 				jdbc.sql("INSERT INTO users (id,primary_email) VALUES (UUID_TO_BIN(?),?)").params(userId.toString(), email).update();
 				jdbc.sql("INSERT INTO auth_identities (id,user_id,provider,subject,email,email_verified) VALUES (UUID_TO_BIN(?),UUID_TO_BIN(?),?,?,?,?)")
-					.params(UUID.randomUUID().toString(), userId.toString(), provider, subject, email, email != null).update();
+					.params(UUID.randomUUID().toString(), userId.toString(), provider, subject, email, email != null && !provider.equals("naver")).update();
 			} catch (DuplicateKeyException ex) { throw new ApiException(ErrorCode.IDENTITY_CONFLICT); }
 		}
 		Map<String, Object> user = user(userId);
@@ -213,6 +213,7 @@ public class AuthService {
 		jdbc.sql("SELECT term_key,term_version FROM user_consents WHERE user_id=UUID_TO_BIN(?) ORDER BY accepted_at")
 			.param(id.toString()).query((rs, i) -> { consents.put(rs.getString(1), rs.getString(2)); return 0; }).list();
 		result.put("consentVersions", consents);
+		result.put("canEmailReauth", settings.mailEnabled() && jdbc.sql("SELECT COUNT(*) FROM auth_identities WHERE user_id=UUID_TO_BIN(?) AND email_verified=TRUE AND email IS NOT NULL").param(id.toString()).query(Integer.class).single()>0);
 		result.put("ownedProjectCount", jdbc.sql("SELECT COUNT(*) FROM projects WHERE owner_user_id=UUID_TO_BIN(?) AND status='active'").param(id.toString()).query(Integer.class).single());
 		result.put("identities", jdbc.sql("SELECT provider,email,linked_at FROM auth_identities WHERE user_id=UUID_TO_BIN(?) ORDER BY provider")
 			.param(id.toString()).query((rs,i) -> Map.of("provider", rs.getString("provider"), "maskedEmail", mask(rs.getString("email")),
