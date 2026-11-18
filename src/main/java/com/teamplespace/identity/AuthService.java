@@ -115,7 +115,7 @@ public class AuthService {
 		if (session == null) throw new ApiException(ErrorCode.CSRF_INVALID);
 		if (purpose.equals("reauth")) {
 			session = requireUser(request);
-			if (jdbc.sql("SELECT COUNT(*) FROM auth_identities WHERE user_id=UUID_TO_BIN(?) AND provider='email' AND subject=?")
+			if (jdbc.sql("SELECT COUNT(*) FROM auth_identities WHERE user_id=UUID_TO_BIN(?) AND email_verified=TRUE AND email=?")
 					.params(session.userId().toString(), normalized).query(Integer.class).single() == 0) throw new ApiException(ErrorCode.REAUTH_REQUIRED);
 		}
 		rateLimit("email:" + normalized, 5, 3600);
@@ -180,6 +180,9 @@ public class AuthService {
 
 	@Transactional
 	public Map<String, Object> login(Session oldSession, String provider, String subject, String email, HttpServletResponse response) {
+		int rotated = jdbc.sql("UPDATE auth_sessions SET state='revoked' WHERE id=UUID_TO_BIN(?) AND state IN ('anonymous','active') AND expires_at>UTC_TIMESTAMP(6)")
+			.param(oldSession.id().toString()).update();
+		if (rotated != 1) throw new ApiException(ErrorCode.UNAUTHENTICATED);
 		UUID userId = identityUser(provider, subject);
 		if (userId == null) {
 			if (email != null && jdbc.sql("SELECT COUNT(*) FROM users WHERE primary_email=?").param(email).query(Integer.class).single() > 0) throw new ApiException(ErrorCode.IDENTITY_CONFLICT);
@@ -191,7 +194,6 @@ public class AuthService {
 			} catch (DuplicateKeyException ex) { throw new ApiException(ErrorCode.IDENTITY_CONFLICT); }
 		}
 		Map<String, Object> user = user(userId);
-		revoke(oldSession.id());
 		createSession(userId, response);
 		return Map.of("user", user, "needsOnboarding", !user.get("onboardingStatus").equals("completed"));
 	}

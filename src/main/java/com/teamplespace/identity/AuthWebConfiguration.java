@@ -5,6 +5,7 @@ import java.util.Set;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,8 +15,17 @@ import jakarta.servlet.http.HttpServletResponse;
 public class AuthWebConfiguration implements WebMvcConfigurer {
 
 	private final AuthService auth;
+	private final AuthSettings settings;
 
-	public AuthWebConfiguration(AuthService auth) { this.auth=auth; }
+	public AuthWebConfiguration(AuthService auth, AuthSettings settings) { this.auth=auth; this.settings=settings; }
+
+	@Override
+	public void addCorsMappings(CorsRegistry registry) {
+		if (settings.configured()) registry.addMapping("/v1/**").allowedOrigins(settings.origin())
+			.allowedMethods("GET","HEAD","POST","PATCH","PUT","DELETE","OPTIONS")
+			.allowedHeaders("Content-Type","X-CSRF-Token","Idempotency-Key","Last-Event-ID")
+			.exposedHeaders("X-Request-Id","Retry-After").allowCredentials(true).maxAge(600);
+	}
 
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {

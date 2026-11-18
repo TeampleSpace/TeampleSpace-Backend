@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "api.schema.json/stage-1.schema.json",
+  "$id": "stage-1.schema.json",
   "$defs": {
     "User": {
       "type": "object",

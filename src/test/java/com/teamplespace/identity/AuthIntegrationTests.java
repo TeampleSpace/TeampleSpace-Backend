@@ -50,6 +50,7 @@ class AuthIntegrationTests {
 
 	@Autowired MockMvc mvc;
 	@Autowired JdbcClient jdbc;
+	@Autowired AuthService auth;
 	@Autowired AuthSecrets secrets;
 	@LocalServerPort int port;
 	@MockitoBean ChallengeMail mail;
@@ -137,6 +138,17 @@ class AuthIntegrationTests {
 		assertCode(browser.send(post("/v1/auth/challenges"),Map.of("email",browser.email,"purpose","login")),429,"RATE_LIMITED");
 	}
 
+	@Test void corsOnlyAcceptsConfiguredCredentialOrigin() throws Exception {
+		var allowed=mvc.perform(options("/v1/auth/challenges").header("Origin","http://localhost:5174")
+			.header("Access-Control-Request-Method","POST").header("Access-Control-Request-Headers","X-CSRF-Token,Content-Type")).andReturn().getResponse();
+		assertThat(allowed.getStatus()).isEqualTo(200);
+		assertThat(allowed.getHeader("Access-Control-Allow-Origin")).isEqualTo("http://localhost:5174");
+		assertThat(allowed.getHeader("Access-Control-Allow-Credentials")).isEqualTo("true");
+		var denied=mvc.perform(options("/v1/auth/challenges").header("Origin","https://attacker.example")
+			.header("Access-Control-Request-Method","POST")).andReturn().getResponse();
+		assertThat(denied.getStatus()).isEqualTo(403);assertThat(denied.getHeader("Access-Control-Allow-Origin")).isNull();
+	}
+
 	@Test void logoutRevokesAuthentication() throws Exception {
 		var browser=new Browser();browser.login();Cookie active=browser.cookie;
 		assertThat(browser.send(delete("/v1/auth/session"),null).getStatus()).isEqualTo(204);
@@ -156,6 +168,28 @@ class AuthIntegrationTests {
 		assertThat(jdbc.sql("SELECT status FROM users WHERE id=UUID_TO_BIN(?)").param(user.get("id").asString()).query(String.class).single()).isEqualTo("deleted");
 	}
 
+	@Test void revokedSessionCannotIssueAnotherSession() throws Exception {
+		var browser=new Browser();
+		var request=new org.springframework.mock.web.MockHttpServletRequest();request.setCookies(browser.cookie);
+		var snapshot=auth.session(request);auth.revoke(snapshot.id());
+		org.assertj.core.api.Assertions.assertThatThrownBy(()->auth.login(snapshot,"email",browser.email,browser.email,new MockHttpServletResponse()))
+			.isInstanceOf(com.teamplespace.platform.error.ApiException.class).hasMessage("UNAUTHENTICATED");
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM users WHERE primary_email=?").param(browser.email).query(Integer.class).single()).isZero();
+	}
+
+	@Test void sessionCanOnlyBeRotatedOnce() throws Exception {
+		var browser=new Browser();var request=new org.springframework.mock.web.MockHttpServletRequest();request.setCookies(browser.cookie);
+		var snapshot=auth.session(request);
+		auth.login(snapshot,"email",browser.email,browser.email,new MockHttpServletResponse());
+		org.assertj.core.api.Assertions.assertThatThrownBy(()->auth.login(snapshot,"email",browser.email,browser.email,new MockHttpServletResponse()))
+			.isInstanceOf(com.teamplespace.platform.error.ApiException.class).hasMessage("UNAUTHENTICATED");
+	}
+
+	@Test void googleCannotUseExistingSsoSessionAsReauthentication() throws Exception {
+		var browser=new Browser();browser.login();
+		assertCode(browser.send(get("/v1/auth/oauth/google/authorize").param("purpose","reauth"),null),401,"REAUTH_REQUIRED");
+	}
+
 	@Test void unsafeOAuthReturnToIsRejected() throws Exception {
 		var browser=new Browser();
 		for(String target:new String[]{"https://evil.example","//evil.example","/\\evil","/%2f%2fevil","/account?next=https://evil.example"}) {
@@ -165,7 +199,7 @@ class AuthIntegrationTests {
 
 	@Test void oauthStateIsBoundToBrowserAndCannotBeReused() throws Exception {
 		var browser=new Browser();var other=new Browser();String[] state={null};
-		when(oauth.authorizationUrl(anyString(),anyString(),anyString(),anyString())).thenAnswer(invocation->{state[0]=invocation.getArgument(1);return "https://accounts.google.com/test";});
+		when(oauth.authorizationUrl(anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(invocation->{state[0]=invocation.getArgument(1);return "https://accounts.google.com/test";});
 		when(oauth.exchange(anyString(),anyString(),anyString(),anyString(),anyString())).thenReturn(new OAuthGateway.Identity(UUID.randomUUID().toString(),browser.email));
 		assertThat(browser.send(get("/v1/auth/oauth/google/authorize"),null).getStatus()).isEqualTo(302);
 		var mismatch=other.send(get("/v1/auth/oauth/google/callback").param("state",state[0]).param("code","test"),null);
@@ -178,7 +212,7 @@ class AuthIntegrationTests {
 
 	@Test void differentProviderWithSameEmailDoesNotMergeAccounts() throws Exception {
 		var browser=new Browser();JsonNode user=browser.login();String[] state={null};
-		when(oauth.authorizationUrl(anyString(),anyString(),anyString(),anyString())).thenAnswer(invocation->{state[0]=invocation.getArgument(1);return "https://accounts.google.com/test";});
+		when(oauth.authorizationUrl(anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(invocation->{state[0]=invocation.getArgument(1);return "https://accounts.google.com/test";});
 		when(oauth.exchange(anyString(),anyString(),anyString(),anyString(),anyString())).thenReturn(new OAuthGateway.Identity(UUID.randomUUID().toString(),browser.email));
 		browser.send(get("/v1/auth/oauth/google/authorize"),null);
 		var response=browser.send(get("/v1/auth/oauth/google/callback").param("state",state[0]).param("code","test"),null);
