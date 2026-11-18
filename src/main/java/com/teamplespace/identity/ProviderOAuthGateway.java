@@ -34,7 +34,7 @@ public class ProviderOAuthGateway implements OAuthGateway {
 		this.client=RestClient.builder().requestFactory(factory).build();
 	}
 
-	public String authorizationUrl(String provider,String state,String nonce,String verifier) {
+	public String authorizationUrl(String provider,String state,String nonce,String verifier,String purpose) {
 		String endpoint=switch(provider) {
 			case "google" -> "https://accounts.google.com/o/oauth2/v2/auth";
 			case "kakao" -> "https://kauth.kakao.com/oauth/authorize";
@@ -45,6 +45,12 @@ public class ProviderOAuthGateway implements OAuthGateway {
 			.queryParam("redirect_uri",callback(provider)).queryParam("response_type","code").queryParam("state",state);
 		if(provider.equals("google")) uri.queryParam("scope","openid email profile").queryParam("nonce",nonce)
 			.queryParam("code_challenge",Base64.getUrlEncoder().withoutPadding().encodeToString(secrets.hash(verifier))).queryParam("code_challenge_method","S256");
+		if (purpose.equals("reauth")) {
+			if (provider.equals("kakao")) uri.queryParam("prompt","login");
+			if (provider.equals("naver")) uri.queryParam("auth_type","reauthenticate");
+			if (provider.equals("google")) uri.queryParam("prompt","select_account")
+				.queryParam("claims","{\"id_token\":{\"auth_time\":{\"essential\":true}}}");
+		}
 		return uri.build().encode().toUriString();
 	}
 
@@ -71,7 +77,7 @@ public class ProviderOAuthGateway implements OAuthGateway {
 						? OAuth2TokenValidatorResult.success() : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"))));
 				var jwt=decoder.decode((String)tokens.get("id_token"));
 				if(jwt.getSubject()==null) throw new ApiException(ErrorCode.ID_TOKEN_INVALID);
-				return new Identity(jwt.getSubject(),Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")) ? jwt.getClaimAsString("email") : null);
+				return new Identity(jwt.getSubject(),Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")) ? jwt.getClaimAsString("email") : null, jwt.getClaimAsInstant("auth_time"));
 			}
 			String userUrl=provider.equals("kakao") ? "https://kapi.kakao.com/v2/user/me" : "https://openapi.naver.com/v1/nid/me";
 			Map<String,Object> user=client.get().uri(userUrl).headers(headers->headers.setBearerAuth((String)tokens.get("access_token"))).retrieve().body(Map.class);

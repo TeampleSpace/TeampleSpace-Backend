@@ -39,14 +39,18 @@ public class OAuthService {
 		if(!"login".equals(purpose) && !"reauth".equals(purpose)) throw new ApiException(ErrorCode.VALIDATION_FAILED);
 		String target=safeReturnTo(returnTo);
 		AuthService.Session session=auth.session(request);
-		if(purpose.equals("reauth")) session=auth.requireUser(request);
+		if(purpose.equals("reauth")) {
+			session=auth.requireUser(request);
+			if(provider.equals("google")) throw new ApiException(ErrorCode.REAUTH_REQUIRED);
+			if(provider.equals("kakao") && request.getHeader("User-Agent")!=null && request.getHeader("User-Agent").toLowerCase(java.util.Locale.ROOT).contains("kakaotalk")) throw new ApiException(ErrorCode.REAUTH_REQUIRED);
+		}
 		if(session==null) session=auth.createSession(null,response);
 		auth.rateLimit("oauth:"+session.id(),20,3600);
 		String state=secrets.token(),nonce=secrets.token(),verifier=secrets.token();
-		String payload=json.writeValueAsString(Map.of("purpose",purpose,"returnTo",target,"nonce",nonce,"verifier",secrets.encrypt(verifier)));
+		String payload=json.writeValueAsString(Map.of("purpose",purpose,"returnTo",target,"nonce",nonce,"verifier",secrets.encrypt(verifier),"startedAt",Instant.now().toString()));
 		jdbc.sql("INSERT INTO auth_transactions(id,session_id,user_id,type,provider,secret_hash,payload,expires_at) VALUES(UUID_TO_BIN(?),UUID_TO_BIN(?),UUID_TO_BIN(?),'oauth',?,?,?,?)")
 			.params(UUID.randomUUID().toString(),session.id().toString(),session.userId()==null ? null : session.userId().toString(),provider,secrets.hash(state),payload,Timestamp.from(Instant.now().plusSeconds(300))).update();
-		return gateway.authorizationUrl(provider,state,nonce,verifier);
+		return gateway.authorizationUrl(provider,state,nonce,verifier,purpose);
 	}
 
 	public String callback(String provider,String state,String code,String error,HttpServletRequest request,HttpServletResponse response) {
@@ -65,6 +69,7 @@ public class OAuthService {
 		var payload=json.readTree((String)saved.get("payload"));
 		var identity=gateway.exchange(provider,code,state,payload.get("nonce").asString(),secrets.decrypt(payload.get("verifier").asString()));
 		if(payload.get("purpose").asString().equals("reauth")) {
+			if(provider.equals("google") && (identity.authenticatedAt()==null || identity.authenticatedAt().isBefore(Instant.parse(payload.get("startedAt").asString()).minusSeconds(5)))) throw new ApiException(ErrorCode.REAUTH_REQUIRED);
 			if(session.userId()==null || !session.userId().equals(auth.identityUser(provider,identity.subject()))) throw new ApiException(ErrorCode.REAUTH_REQUIRED);
 			return settings.origin()+"/account#reauthProof="+auth.proof(session).get("reauthProof");
 		}
