@@ -71,7 +71,7 @@ main의 `99b547b`다.
 ## 인증과 계정 HTTP 경로 추가
 
 - 세션 초기 정보와 기능 지원 정보를 실제 HTTP로 제공한다
-- 기능 지원 정보의 선택 필드 authProviders에 제공자별 설정 상태를 포함한다
+- 기능 지원 정보의 필수 필드 authProviders에 제공자별 로그인과 재인증 지원 상태를 포함한다
 - stage-1.schema.json에 사용자, 이메일 인증, 가입 동의, 재인증과 탈퇴 요청 응답을 추가했다
 - bootstrap의 displayName과 사용자 상세의 name은 각각 기존 형식을 유지한다
 - 세션 교체 뒤 bootstrap을 다시 읽어 CSRF 토큰을 갱신한다
