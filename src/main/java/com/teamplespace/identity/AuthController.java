@@ -40,7 +40,7 @@ public class AuthController {
 		result.put("featureFlags",Map.of("billing",false,"aiRevision",false,"restore",false,"accountLinking",false,"regeneration",false,"offlineDrafts",false));
 		result.put("legalDocuments",settings.legalDocuments());result.put("idempotencyRetentionSeconds",86400);
 		result.put("listLimit",Map.of("default",30,"max",100));
-		result.put("authProviders",List.of("email","kakao","naver","google").stream().map(provider->Map.of("provider",provider,"enabled",provider.equals("email")?settings.mailEnabled():settings.oauthEnabled(provider))).toList());
+		result.put("authProviders",List.of("email","kakao","naver","google").stream().map(provider->Map.of("provider",provider,"enabled",provider.equals("email")?settings.mailEnabled():settings.oauthEnabled(provider),"reauthEnabled",provider.equals("email")?settings.mailEnabled():!provider.equals("google")&&settings.oauthEnabled(provider))).toList());
 		return result;
 	}
 
