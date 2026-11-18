@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
@@ -14,9 +16,13 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.teamplespace.contracts.ContractSchemas;
@@ -59,6 +65,16 @@ class ApiErrorResponseTests {
 		@GetMapping("/test-probe/broken")
 		String broken() {
 			throw new IllegalStateException("내부 비밀 정보");
+		}
+
+		@PostMapping("/test-probe/echo")
+		Map<String, Object> echo(@RequestBody Map<String, Object> body) {
+			return body;
+		}
+
+		@GetMapping("/test-probe/page")
+		Map<String, Object> page(@RequestParam int size) {
+			return Map.of("size", size);
 		}
 
 	}
@@ -133,12 +149,71 @@ class ApiErrorResponseTests {
 	}
 
 	@Test
-	void requestErrorDecidedBySpringKeepsItsStatus() throws Exception {
-		// 허용하지 않는 메서드 같은 요청 오류를 서버 오류로 바꾸지 않는다
+	void malformedJsonKeepsItsStatusAndHidesParserDetails() throws Exception {
+		MockHttpServletResponse response = mvc
+			.perform(post("/test-probe/echo").contentType(MediaType.APPLICATION_JSON).content("{\"text\": 비밀"))
+			.andReturn()
+			.getResponse();
+
+		JsonNode body = body(response);
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(body.get("error").get("code").asString()).isEqualTo("BAD_REQUEST");
+		assertThat(body.get("requestId").asString()).isEqualTo(response.getHeader(RequestIdFilter.HEADER));
+		// 파서 메시지와 요청 내용을 돌려주지 않는다
+		assertThat(response.getContentAsString()).doesNotContain("JSON")
+			.doesNotContain("Unexpected")
+			.doesNotContain("비밀")
+			.doesNotContain("Exception");
+	}
+
+	@Test
+	void methodNotAllowedKeepsItsStatusAndAllowHeader() throws Exception {
 		MockHttpServletResponse response = mvc.perform(post("/test-probe/ok")).andReturn().getResponse();
 
+		JsonNode body = body(response);
 		assertThat(response.getStatus()).isEqualTo(405);
-		assertThat(response.getHeader(RequestIdFilter.HEADER)).matches("req_[0-9a-f]{32}");
+		assertThat(body.get("error").get("code").asString()).isEqualTo("METHOD_NOT_ALLOWED");
+		assertThat(response.getHeader("Allow")).contains("GET");
+		assertThat(body.get("requestId").asString()).isEqualTo(response.getHeader(RequestIdFilter.HEADER));
+	}
+
+	@Test
+	void unsupportedBodyTypeKeepsItsStatus() throws Exception {
+		MockHttpServletResponse response = mvc
+			.perform(post("/test-probe/echo").contentType(MediaType.TEXT_PLAIN).content("글자"))
+			.andReturn()
+			.getResponse();
+
+		JsonNode body = body(response);
+		assertThat(response.getStatus()).isEqualTo(415);
+		assertThat(body.get("error").get("code").asString()).isEqualTo("UNSUPPORTED_MEDIA_TYPE");
+	}
+
+	@Test
+	void missingOrMistypedParameterIsBadRequest() throws Exception {
+		MockHttpServletResponse missing = mvc.perform(get("/test-probe/page")).andReturn().getResponse();
+		MockHttpServletResponse mistyped = mvc.perform(get("/test-probe/page").param("size", "많이"))
+			.andReturn()
+			.getResponse();
+
+		assertThat(missing.getStatus()).isEqualTo(400);
+		assertThat(body(missing).get("error").get("code").asString()).isEqualTo("BAD_REQUEST");
+		assertThat(mistyped.getStatus()).isEqualTo(400);
+		assertThat(body(mistyped).get("error").get("code").asString()).isEqualTo("BAD_REQUEST");
+		assertThat(mistyped.getContentAsString()).doesNotContain("많이").doesNotContain("NumberFormat");
+	}
+
+	@Test
+	void unacceptableResponseTypeKeepsItsStatus() throws Exception {
+		MockHttpServletResponse response = mvc.perform(get("/test-probe/page").param("size", "3").accept(MediaType.APPLICATION_PDF))
+			.andReturn()
+			.getResponse();
+
+		// 요청한 형식으로 줄 수 없어도 오류 본문은 JSON으로 준다
+		JsonNode body = body(response);
+		assertThat(response.getStatus()).isEqualTo(406);
+		assertThat(body.get("error").get("code").asString()).isEqualTo("NOT_ACCEPTABLE");
+		assertThat(response.getContentType()).startsWith("application/json");
 	}
 
 	// 본문이 계약 스키마를 만족하는지도 함께 확인한다
