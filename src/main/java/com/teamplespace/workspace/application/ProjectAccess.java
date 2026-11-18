@@ -20,8 +20,8 @@ public class ProjectAccess {
 
 	public void requireActiveMember(UUID projectId, UUID userId) {
 		int active = jdbc
-			.sql("SELECT COUNT(*) FROM project_memberships WHERE project_id = UUID_TO_BIN(:project)"
-					+ " AND user_id = UUID_TO_BIN(:user) AND state = 'active'")
+			.sql("SELECT COUNT(*) FROM project_memberships m JOIN projects p ON p.id=m.project_id JOIN users u ON u.id=m.user_id WHERE u.status='active' AND p.status='active' AND project_id = UUID_TO_BIN(:project)"
+					+ " AND m.user_id = UUID_TO_BIN(:user) AND m.state = 'active'")
 			.param("project", projectId.toString())
 			.param("user", userId.toString())
 			.query(Integer.class)
