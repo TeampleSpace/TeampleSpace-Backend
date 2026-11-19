@@ -433,5 +433,30 @@
     "example": "invalid/material-summary-memo-processing.json",
     "schema": "stage-2.schema.json#/$defs/MaterialSummary",
     "valid": false
+  },
+  {
+    "example": "outline-empty.json",
+    "schema": "stage-3.schema.json#/$defs/Outline",
+    "valid": true
+  },
+  {
+    "example": "outline.json",
+    "schema": "stage-3.schema.json#/$defs/Outline",
+    "valid": true
+  },
+  {
+    "example": "outline-put-request.json",
+    "schema": "stage-3.schema.json#/$defs/OutlinePutRequest",
+    "valid": true
+  },
+  {
+    "example": "invalid/outline-duplicate-source.json",
+    "schema": "stage-3.schema.json#/$defs/OutlinePutRequest",
+    "valid": false
+  },
+  {
+    "example": "error-outline-version-conflict.json",
+    "schema": "api.schema.json#/$defs/ErrorResponse",
+    "valid": true
   }
 ]
