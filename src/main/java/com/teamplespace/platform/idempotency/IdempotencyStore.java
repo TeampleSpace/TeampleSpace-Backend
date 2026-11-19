@@ -93,6 +93,20 @@ public class IdempotencyStore {
 			.update();
 	}
 
+	// 하위 자원이 없어진 경우 재전송의 접근 권한을 확인할 범위만 찾는다
+	public Optional<UUID> findResource(Key key) {
+		return jdbc.sql("""
+				SELECT BIN_TO_UUID(resource_id) FROM idempotency_records
+				WHERE actor_scope = :scope AND route_key = :route AND key_hash = :keyHash
+				  AND resource_id IS NOT NULL AND expires_at > NOW(6)
+				""")
+			.param("scope", key.actorScope())
+			.param("route", key.routeKey())
+			.param("keyHash", key.keyHash())
+			.query(String.class)
+			.optional().map(UUID::fromString);
+	}
+
 	// 다른 트랜잭션이 같은 키를 잡고 있으면 기다리지 않고 처리 중으로 알린다
 	private Optional<Row> lock(Key key) {
 		try {

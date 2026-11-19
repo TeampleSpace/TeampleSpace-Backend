@@ -23,11 +23,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 
 	static OutlineInput parse(JsonNode body) {
 		checkFields(body, ROOT_FIELDS, "outline");
-		JsonNode version = body.path("expectedVersion");
-		if (!version.isIntegralNumber() || !version.canConvertToLong()
-				|| version.asLong() < 1 || version.asLong() > MAX_VERSION) {
-			throw invalid("expectedVersion", "버전을 확인해 주세요.");
-		}
+		long version = expectedVersion(body);
 		JsonNode items = body.path("items");
 		if (!items.isArray() || items.size() > MAX_ITEMS) {
 			throw invalid("items", "구성 항목은 100개까지 저장할 수 있어요.");
@@ -49,10 +45,19 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 			String summary = item.has("summary") ? text(item.get("summary"), field + ".summary", 10_000) : "";
 			parsed.add(new Item(id, title, summary, sources(item.path("sourceIds"), field + ".sourceIds")));
 		}
-		return new OutlineInput(version.asLong(), List.copyOf(parsed));
+		return new OutlineInput(version, List.copyOf(parsed));
 	}
 
-	private static List<UUID> sources(JsonNode value, String field) {
+	static long expectedVersion(JsonNode body) {
+		JsonNode version = body.path("expectedVersion");
+		if (!version.isIntegralNumber() || !version.canConvertToLong()
+				|| version.asLong() < 1 || version.asLong() > MAX_VERSION) {
+			throw invalid("expectedVersion", "버전을 확인해 주세요.");
+		}
+		return version.asLong();
+	}
+
+	static List<UUID> sources(JsonNode value, String field) {
 		if (!value.isArray() || value.size() > MAX_SOURCES) {
 			throw invalid(field, "한 항목에 근거 자료를 20개까지 연결할 수 있어요.");
 		}
@@ -68,7 +73,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		return List.copyOf(ids);
 	}
 
-	private static void checkFields(JsonNode value, Set<String> allowed, String field) {
+	static void checkFields(JsonNode value, Set<String> allowed, String field) {
 		if (!value.isObject() || !allowed.containsAll(value.propertyNames())) {
 			throw invalid(field, "요청 항목을 확인해 주세요.");
 		}

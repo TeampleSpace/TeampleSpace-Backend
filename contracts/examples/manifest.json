@@ -458,5 +458,10 @@
     "example": "error-outline-version-conflict.json",
     "schema": "api.schema.json#/$defs/ErrorResponse",
     "valid": true
+  },
+  {
+    "example": "outline-sources-put-request.json",
+    "schema": "stage-3.schema.json#/$defs/OutlineSourcesPutRequest",
+    "valid": true
   }
 ]

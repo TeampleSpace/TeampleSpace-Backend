@@ -94,6 +94,44 @@ class OutlineHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void replacesOnlyTheSelectedItemsSourcesAndReplaysEvenAfterItsRemoval() throws Exception {
+		Browser owner = signup("근거 수정 소유자");
+		Browser member = signup("근거 수정 팀원");
+		Browser outsider = signup("근거 수정 외부인");
+		String project = createProject(owner, "근거 교체");
+		join(owner, member, project);
+		String projectPath = "/projects/" + project + "/outline";
+		String first = memo(owner, project, "첫 자료").get("id").asString();
+		String second = memo(owner, project, "둘째 자료").get("id").asString();
+		JsonNode original = put(owner, projectPath, input(1, item("배경", first), item("결론", first)), 200);
+		String itemId = original.get("items").get(0).get("id").asString();
+		String path = "/outline-items/" + itemId + "/sources";
+		var body = Map.of("expectedVersion", 2, "sourceIds", List.of(second, first));
+		assertThat(ContractSchemas.validate("stage-3.schema.json#/$defs/OutlineSourcesPutRequest",
+			json.writeValueAsString(body))).isEmpty();
+		put(outsider, path, body, 404);
+		put(member, path, Map.of("expectedVersion", 2, "sourceIds", List.of(second, UUID.randomUUID().toString())), 422);
+		assertThat(owner.get(projectPath)).isEqualTo(original);
+		String key = UUID.randomUUID().toString();
+		JsonNode saved = member.request("PUT", path, body, 200, key);
+		assertThat(saved.get("version").asLong()).isEqualTo(3);
+		assertThat(saved.get("items").get(0).get("id").asString()).isEqualTo(itemId);
+		assertThat(saved.get("items").get(0).get("sourceRefs").get(0).get("materialId").asString()).isEqualTo(second);
+		assertThat(saved.get("items").get(1)).isEqualTo(original.get("items").get(1));
+		assertThat(owner.get(projectPath)).isEqualTo(saved);
+		assertThat(put(owner, path, body, 409).get("error").get("currentVersions").get("outlineVersion").asLong())
+			.isEqualTo(3);
+		JsonNode cleared = put(owner, path, Map.of("expectedVersion", 3, "sourceIds", List.of()), 200);
+		assertThat(cleared.get("items").get(0).get("sourceRefs").isEmpty()).isTrue();
+		assertThat(cleared.get("items").get(1)).isEqualTo(original.get("items").get(1));
+		put(owner, projectPath, input(4), 200);
+		assertThat(member.request("PUT", path, body, 200, key)).isEqualTo(saved);
+		removeMember(owner, project, member.userId);
+		member.request("PUT", path, body, 403, key);
+		assertThat(owner.get(projectPath).get("version").asLong()).isEqualTo(5);
+	}
+
+	@Test
 	void twoMembersRaceAndOnlyTheWinningPayloadIsStoredAndReplayed() throws Exception {
 		Browser owner = signup("동시 저장 소유자");
 		Browser member = signup("동시 저장 팀원");

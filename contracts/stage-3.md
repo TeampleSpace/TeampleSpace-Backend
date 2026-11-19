@@ -18,3 +18,9 @@
 - 버전 불일치의 새 요청은 [VERSION_CONFLICT](examples/error-outline-version-conflict.json)로 현재 `currentVersions.outlineVersion`을 반환한다. 덮어쓰지 않으며 충돌 이후에는 먼저 조회하고 새로운 키로 저장한다.
 
 저장 성공 시 `outline.updated`에 새 `outlineVersion`을 기록한다. 같은 키의 재시도는 버전이나 이벤트를 추가하지 않는다.
+
+## 항목 근거 교체
+
+`PUT /v1/outline-items/{itemId}/sources`는 [근거 저장 요청](examples/outline-sources-put-request.json)의 버전과 선택한 자료 ID를 받고 새 전체 구성을 200으로 반환한다. 빈 배열이면 해당 항목의 근거를 모두 해제한다. 다른 항목과 그 근거, 기존 순서는 유지하며 구성 버전을 한 번 올린다. 원문은 조회 결과의 자료 ID와 개정 ID를 사용해 기존 자료 원문 API에서 연다.
+
+권한 확인, 멱등키와 버전 충돌 기준은 전체 저장과 같다. 권한이 유지되는 동안 성공한 키는 해당 항목이 이후 삭제되어도 기존 응답을 재생할 수 있다.
