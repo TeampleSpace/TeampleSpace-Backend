@@ -235,7 +235,7 @@ public class LinkFetcher {
 		else {
 			text = new String(body, supported(charset) == null ? StandardCharsets.UTF_8 : Charset.forName(charset));
 		}
-		text = MaterialAnalysis.clean(text).replaceAll("[ \\t]*\\n[ \\t]*", "\n").replaceAll("\\n{3,}", "\n\n");
+		text = MaterialAnalysis.clean(text).replaceAll("\\n[ \\t]+", "\n").replaceAll("\\n{3,}", "\n\n");
 		if (text.isBlank()) {
 			throw new JobFailure("LINK_UNSUPPORTED_CONTENT", "글로 읽을 수 없는 문서예요.", false);
 		}

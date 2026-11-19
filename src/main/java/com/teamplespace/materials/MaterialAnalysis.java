@@ -194,7 +194,21 @@ public class MaterialAnalysis implements JobHandler {
 
 	// 저장할 수 없는 제어 문자를 지우고 줄 끝 공백을 정리한다
 	static String clean(String text) {
-		return text.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "").replaceAll("[ \\t]+\\n", "\n").strip();
+		StringBuilder cleaned = new StringBuilder(text.length());
+		int lineEnd = 0;
+		for (int index = 0; index < text.length(); index++) {
+			char value = text.charAt(index);
+			if (value == '\n') {
+				cleaned.setLength(lineEnd);
+				cleaned.append(value);
+				lineEnd = cleaned.length();
+			}
+			else if ((value >= ' ' && value != 127) || value == '\t') {
+				cleaned.append(value);
+				if (value != ' ' && value != '\t') lineEnd = cleaned.length();
+			}
+		}
+		return cleaned.toString().strip();
 	}
 
 }

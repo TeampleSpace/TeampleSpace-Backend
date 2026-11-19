@@ -264,6 +264,19 @@ class LinkFetcherTests {
 	}
 
 	@Test
+	void collectsMaximumSizePlainTextWithLongWhitespaceWithoutStalling() {
+		String body = "x" + " ".repeat(LinkFetcher.MAX_BYTES - 2) + "y";
+		server.createContext("/long-spaces", exchange -> respond(exchange, 200, "text/plain; charset=utf-8",
+				body.getBytes(StandardCharsets.UTF_8)));
+		server.createContext("/spaced-lines", exchange -> respond(exchange, 200, "text/plain; charset=utf-8",
+				"  첫 줄 \t\r\n \t둘째 줄 \n \n\t\n 끝  ".getBytes(StandardCharsets.UTF_8)));
+		org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
+			assertThat(local.fetch(base + "/long-spaces").text()).isEqualTo(body);
+			assertThat(local.fetch(base + "/spaced-lines").text()).isEqualTo("첫 줄\n둘째 줄\n\n끝");
+		});
+	}
+
+	@Test
 	void followsAFewRedirectsAndChecksEachHop() {
 		assertThat(local.fetch(base + "/hop?2").url()).isEqualTo(base + "/page");
 		assertThat(failure(local, base + "/hop?3").code()).isEqualTo("LINK_FETCH_FAILED");
