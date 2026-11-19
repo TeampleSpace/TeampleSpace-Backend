@@ -140,6 +140,33 @@ class LinkFetcherTests {
 	}
 
 	@Test
+	void dnsLookupCannotHoldTheWorkerPastTheTotalDeadline() {
+		var release = new java.util.concurrent.CountDownLatch(1);
+		LinkFetcher slowDns = new LinkFetcher((address, port) -> true, Duration.ofMillis(200), host -> {
+			boolean done = false;
+			while (!done) {
+				try { release.await(); done = true; } catch (InterruptedException ignored) { }
+			}
+			return new InetAddress[] { InetAddress.getLoopbackAddress() };
+		});
+		try {
+			org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1), () ->
+				assertThat(failure(slowDns, "https://slow-dns.example/").code()).isEqualTo("LINK_FETCH_FAILED"));
+		} finally { release.countDown(); }
+	}
+
+	@Test
+	void normalizedUrlMustStillFitTheStoredLimit() {
+		String shortUrl = LinkFetcher.normalize("https://example.com/" + "한".repeat(200));
+		assertThat(shortUrl.length()).isLessThanOrEqualTo(LinkFetcher.URL_MAX);
+		assertThat(LinkFetcher.normalize(shortUrl)).isEqualTo(shortUrl);
+		ApiException error = catchThrowableOfType(ApiException.class,
+				() -> LinkFetcher.normalize("https://example.com/" + "한".repeat(230)));
+		assertThat(error).isNotNull();
+		assertThat(error.code()).isEqualTo(ErrorCode.INVALID_URL);
+	}
+
+	@Test
 	void totalDeadlineAlsoStopsSlowResponseHeaders() throws Exception {
 		try (var socket = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
 			Thread peer = Thread.ofVirtual().start(() -> {
