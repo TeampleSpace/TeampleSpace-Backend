@@ -82,7 +82,7 @@ set -a && source .env && set +a
 - 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자와 편집 세션 식별자는 테스트가 만들어 넘긴다
 - 요청과 응답 형식은 `contracts` 폴더의 계약을 따른다
 - PPTX와 PDF 출력은 실험만 했다. 방법과 결과는 `experiments/export/README.md`에 있다
-- 0단계에서 끝낸 것과 남은 확인 사항, 실행한 검증은 `docs/stage-0-result.md`에 있다
+- 0단계에서 끝낸 것과 남은 확인 사항, 실행한 검증은 `../Docs/be/stage-0-result.md`에 있다
 
 ## 작업 처리
 
