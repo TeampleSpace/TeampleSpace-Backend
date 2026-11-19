@@ -99,6 +99,22 @@ public class OutlineService {
 
 		List<Item> replacement = replacement(projectId, current.id(), input);
 		UUID outlineId = current.id() == null ? UUID.randomUUID() : current.id();
+		Outline outline = writeReplacement(actor, projectId, current, outlineId, replacement);
+		return complete(key, 200, json.valueToTree(outline), outlineId);
+	}
+
+	long version(UUID projectId) {
+		return find(projectId).version();
+	}
+
+	// 호출자는 프로젝트 잠금을 보유하고 발행 직전 원본을 다시 확인한다
+	Outline publishGenerated(UUID actor, UUID projectId, OutlineInput input) {
+		OutlineRow current = find(projectId);
+		UUID outlineId = current.id() == null ? UUID.randomUUID() : current.id();
+		return writeReplacement(actor, projectId, current, outlineId, replacement(projectId, current.id(), input));
+	}
+
+	private Outline writeReplacement(UUID actor, UUID projectId, OutlineRow current, UUID outlineId, List<Item> replacement) {
 		long version = current.version() + 1;
 		if (current.id() == null) {
 			jdbc.sql("""
@@ -113,7 +129,7 @@ public class OutlineService {
 		storeItems(projectId, outlineId, replacement);
 		events.append(projectId, "outline.updated", actor, null, outlineId,
 				json.createObjectNode().put("outlineVersion", version));
-		return complete(key, 200, json.valueToTree(new Outline(projectId, version, replacement)), outlineId);
+		return new Outline(projectId, version, replacement);
 	}
 
 	@Transactional
