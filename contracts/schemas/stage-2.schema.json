@@ -232,6 +232,20 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["materialId", "revisionId", "sourceVersion", "kind", "title", "file", "markdown", "link"],
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "file" } } },
+          "then": { "properties": { "file": { "type": "object" }, "markdown": { "type": "null" }, "link": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "memo" } } },
+          "then": { "properties": { "file": { "type": "null" }, "markdown": { "type": "string" }, "link": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "link" } } },
+          "then": { "properties": { "file": { "type": "null" }, "markdown": { "type": "null" }, "link": { "type": "object" } } }
+        }
+      ],
       "properties": {
         "materialId": { "$ref": "api.schema.json#/$defs/Uuid" },
         "revisionId": { "$ref": "api.schema.json#/$defs/Uuid" },

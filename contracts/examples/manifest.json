@@ -378,5 +378,15 @@
     "example": "invalid/upload-request-uppercase-checksum.json",
     "schema": "stage-2.schema.json#/$defs/UploadRequest",
     "valid": false
+  },
+  {
+    "example": "invalid/material-source-kind-mismatch.json",
+    "schema": "stage-2.schema.json#/$defs/MaterialSource",
+    "valid": false
+  },
+  {
+    "example": "invalid/material-source-without-content.json",
+    "schema": "stage-2.schema.json#/$defs/MaterialSource",
+    "valid": false
   }
 ]

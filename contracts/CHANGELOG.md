@@ -13,6 +13,7 @@
 스키마
 
 - `stage-2.schema.json` 추가. 자료 목록과 상세, 개정, 출처, 업로드 준비, 자료 등록과 수정, 삭제, 원문 형식이다
+- 원문 형식은 유형에 맞는 항목만 값을 갖도록 검사한다. 파일 자료는 `file`, 마크다운 자료는 `markdown`, 링크 자료는 `link`다
 - `MaterialNote`에 필수 항목 `updatedByName` 추가. 본문은 20000자까지다
 - `CurrentVersions`에 `noteVersion` 추가
 
