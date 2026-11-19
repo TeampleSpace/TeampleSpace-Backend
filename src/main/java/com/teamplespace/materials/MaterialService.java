@@ -539,7 +539,7 @@ public class MaterialService {
 
 	// 본문 앞부분에서 표시 기호를 걷어 낸 짧은 발췌. 글이 없으면 null
 	static String excerpt(String text) {
-		String plain = text.replaceAll("(?m)^\\s*(#{1,6}|[-*+>]|\\d+\\.)\\s+", "").replaceAll("\\s+", " ").strip();
+		String plain = text.replaceAll("(?m)^\\h*(#{1,6}|[-*+>]|\\d+\\.)\\h+", "").replaceAll("\\s+", " ").strip();
 		if (plain.isEmpty()) {
 			return null;
 		}
