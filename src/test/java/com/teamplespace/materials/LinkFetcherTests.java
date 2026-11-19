@@ -140,6 +140,62 @@ class LinkFetcherTests {
 	}
 
 	@Test
+	void totalDeadlineAlsoStopsSlowResponseHeaders() throws Exception {
+		try (var socket = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+			Thread peer = Thread.ofVirtual().start(() -> {
+				try (var connection = socket.accept()) {
+					for (byte value : "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<p>late</p>".getBytes(StandardCharsets.US_ASCII)) {
+						connection.getOutputStream().write(value);
+						connection.getOutputStream().flush();
+						Thread.sleep(40);
+					}
+				} catch (Exception ignored) { }
+			});
+			LinkFetcher shortBudget = new LinkFetcher((address, port) -> address.isLoopbackAddress(), Duration.ofMillis(250));
+			org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(2), () ->
+				assertThat(failure(shortBudget, "http://127.0.0.1:" + socket.getLocalPort()).code()).isEqualTo("LINK_FETCH_FAILED"));
+			peer.interrupt();
+		}
+	}
+
+	@Test
+	void errorsAndOversizedChunkedBodiesCloseWithoutDraining() {
+		server.createContext("/endless-error", exchange -> streamForever(exchange, 503, false));
+		server.createContext("/endless-large", exchange -> streamForever(exchange, 200, true));
+		org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+			assertThat(failure(local, base + "/endless-error").code()).isEqualTo("LINK_FETCH_FAILED");
+			JobFailure large = failure(local, base + "/endless-large");
+			assertThat(large.code()).isEqualTo("LINK_TOO_LARGE");
+			assertThat(large.retryable()).isFalse();
+		});
+	}
+
+	private static void streamForever(HttpExchange exchange, int status, boolean large) throws java.io.IOException {
+		exchange.getResponseHeaders().add("Content-Type", "text/html");
+		exchange.sendResponseHeaders(status, 0);
+		try {
+			if (large) exchange.getResponseBody().write(new byte[LinkFetcher.MAX_BYTES + 4096]);
+			for (int i = 0; i < 100; i++) {
+				exchange.getResponseBody().write('a');
+				exchange.getResponseBody().flush();
+				Thread.sleep(40);
+			}
+		} catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+		finally { exchange.close(); }
+	}
+
+	@Test
+	void redirectHopsShareOneDeadline() {
+		server.createContext("/delayed-hop", exchange -> {
+			try { Thread.sleep(180); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+			int left = Integer.parseInt(exchange.getRequestURI().getQuery());
+			redirect(exchange, left == 0 ? "/page" : "/delayed-hop?" + (left - 1));
+		});
+		LinkFetcher shortBudget = new LinkFetcher((address, port) -> address.isLoopbackAddress(), Duration.ofMillis(300));
+		assertThat(failure(shortBudget, base + "/delayed-hop?2").code()).isEqualTo("LINK_FETCH_FAILED");
+	}
+
+	@Test
 	void connectsOnlyToTheAlreadyCheckedAddress() throws Exception {
 		AtomicInteger resolutions = new AtomicInteger();
 		int port = server.getAddress().getPort();

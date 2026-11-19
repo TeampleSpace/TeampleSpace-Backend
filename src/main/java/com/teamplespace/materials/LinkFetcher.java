@@ -87,9 +87,12 @@ public class LinkFetcher {
 
 	public Page fetch(String url) {
 		URI uri = parse(url);
+		long deadline = System.nanoTime() + timeout.toNanos();
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
 			if (uri == null) throw blocked();
 			InetAddress[] pinned = resolve(uri);
+			long remaining = deadline - System.nanoTime();
+			if (remaining <= 0) throw failed(true);
 			String host = uri.getHost();
 			// 검사한 주소만 연결에 사용하며 TLS 인증과 Host는 원래 호스트를 유지한다
 			DnsResolver resolver = new DnsResolver() {
@@ -106,6 +109,9 @@ public class LinkFetcher {
 			request.setHeader("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9");
 			request.setHeader("Accept-Encoding", "gzip");
 			request.setHeader("User-Agent", "TeampleSpace-LinkFetcher/1.0");
+			// 헤더와 본문, 모든 리다이렉트를 하나의 시간 예산으로 제한한다
+			var watchdog = CompletableFuture.runAsync(request::cancel,
+					CompletableFuture.delayedExecutor(remaining, TimeUnit.NANOSECONDS));
 			try (var client = HttpClients.custom().setConnectionManager(manager).disableRedirectHandling()
 					.disableAutomaticRetries().disableContentCompression()
 					.setDefaultRequestConfig(RequestConfig.custom()
@@ -117,12 +123,12 @@ public class LinkFetcher {
 					request.cancel();
 					continue;
 				}
-				if (status >= 500 || status == 429 || status == 408) throw failed(true);
-				if (status < 200 || status >= 300) throw failed(false);
+				if (status >= 500 || status == 429 || status == 408) { request.cancel(); throw failed(true); }
+				if (status < 200 || status >= 300) { request.cancel(); throw failed(false); }
 				return read(uri, response, request);
 			}
 			catch (IOException ex) { throw failed(true); }
-			finally { request.cancel(); manager.close(); }
+			finally { request.cancel(); watchdog.cancel(false); manager.close(); }
 		}
 		throw failed(false);
 	}
@@ -167,23 +173,15 @@ public class LinkFetcher {
 			throw tooLarge();
 		}
 		byte[] body;
-		// 본문이 오다 멈추면 제한 시간 뒤에 연결을 닫아 읽기를 끝낸다
-		var watchdog = CompletableFuture.runAsync(request::cancel,
-				CompletableFuture.delayedExecutor(timeout.toMillis(), TimeUnit.MILLISECONDS));
 		try (InputStream raw = response.getEntity() == null ? InputStream.nullInputStream() : response.getEntity().getContent();
 				InputStream input = header(response, "Content-Encoding").equalsIgnoreCase("gzip")
 						? new GZIPInputStream(raw) : raw) {
 			// 압축을 푼 크기로 한도를 잰다
 			body = input.readNBytes(MAX_BYTES + 1);
+			if (body.length > MAX_BYTES) { request.cancel(); throw tooLarge(); }
 		}
 		catch (IOException ex) {
 			throw failed(true);
-		}
-		finally {
-			watchdog.cancel(false);
-		}
-		if (body.length > MAX_BYTES) {
-			throw tooLarge();
 		}
 		String charset = contentType.contains("charset=")
 				? contentType.substring(contentType.indexOf("charset=") + 8).split("[;\\s]")[0].replace("\"", "") : null;
