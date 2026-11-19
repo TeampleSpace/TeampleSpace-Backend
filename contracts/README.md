@@ -190,7 +190,9 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 동기화 스냅샷 | `GET /v1/projects/{projectId}/sync-snapshot` | `SyncSnapshot` | 문서와 커서를 같은 시점에 읽는 처리와 시험이 있다. 팀원, 디자인, 작업, 자료 요약은 없다 | 4단계 |
 | 기능 지원 정보 | `GET /v1/capabilities` | `Capabilities` | 제공자와 약관 설정을 반영한 HTTP 응답 구현 | 1단계 |
 | 세션 초기 정보 | `GET /v1/auth/bootstrap` | `AuthBootstrap` | 쿠키 기반 익명 및 인증 세션과 CSRF 토큰 발급 구현 | 1단계 |
-| 디자인 설정 조회 | `GET /v1/projects/{projectId}/design-settings` | `DesignSettings` | 형식만 | 3단계 |
+| 발표 템플릿 목록 | `GET /v1/templates` | `TemplateCatalog` | 공개 개정과 옵션 조회 | 3단계 |
+| 디자인 설정 조회 | `GET /v1/projects/{projectId}/design-settings` | `DesignSettings` | 저장한 선택과 개정 조회 | 3단계 |
+| 디자인 설정 저장 | `PUT /v1/projects/{projectId}/design-settings` | `DesignSettingsPutRequest`, `DesignSettings` | 버전 비교와 멱등 저장, [디자인 계약](stage-3-design.md) | 3단계 |
 | 발표 구성 조회 | `GET /v1/projects/{projectId}/outline` | `Outline` | 현재 구성과 고정된 자료 개정 조회 | 3단계 |
 | 발표 구성 저장 | `PUT /v1/projects/{projectId}/outline` | `OutlinePutRequest`, `Outline` | 버전 비교와 멱등 저장, [발표 구성 계약](stage-3.md) | 3단계 |
 | 발표 항목 근거 교체 | `PUT /v1/outline-items/{itemId}/sources` | `OutlineSourcesPutRequest`, `Outline` | 한 항목의 자료 근거를 버전 비교로 교체 | 3단계 |
