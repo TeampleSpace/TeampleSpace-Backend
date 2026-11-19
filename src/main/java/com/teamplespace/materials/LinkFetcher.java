@@ -5,10 +5,6 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -18,6 +14,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.zip.GZIPInputStream;
 
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.util.Timeout;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +48,12 @@ public class LinkFetcher {
 
 	private final Duration timeout;
 
-	private final HttpClient client = HttpClient.newBuilder()
-		.followRedirects(HttpClient.Redirect.NEVER)
-		.connectTimeout(Duration.ofSeconds(5))
-		.build();
+	@FunctionalInterface
+	interface Addresses {
+		InetAddress[] resolve(String host) throws UnknownHostException;
+	}
+
+	private final Addresses addresses;
 
 	@Autowired
 	public LinkFetcher() {
@@ -56,8 +62,13 @@ public class LinkFetcher {
 
 	// 테스트가 로컬 서버로 확인할 때만 허용 규칙을 바꾼다
 	LinkFetcher(BiPredicate<InetAddress, Integer> allowed, Duration timeout) {
+		this(allowed, timeout, InetAddress::getAllByName);
+	}
+
+	LinkFetcher(BiPredicate<InetAddress, Integer> allowed, Duration timeout, Addresses addresses) {
 		this.allowed = allowed;
 		this.timeout = timeout;
+		this.addresses = addresses;
 	}
 
 	// 등록할 때 형식만 확인하고 정리한 주소를 돌려준다. 이름 풀이는 수집할 때 한다
@@ -77,27 +88,41 @@ public class LinkFetcher {
 	public Page fetch(String url) {
 		URI uri = parse(url);
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-			if (uri == null) {
-				throw blocked();
+			if (uri == null) throw blocked();
+			InetAddress[] pinned = resolve(uri);
+			String host = uri.getHost();
+			// 검사한 주소만 연결에 사용하며 TLS 인증과 Host는 원래 호스트를 유지한다
+			DnsResolver resolver = new DnsResolver() {
+				public InetAddress[] resolve(String name) throws UnknownHostException {
+					if (!host.equals(name)) throw new UnknownHostException(name);
+					return pinned.clone();
+				}
+				public String resolveCanonicalHostname(String name) { return name; }
+			};
+			var manager = PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(resolver)
+				.setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(5))
+					.setSocketTimeout(Timeout.ofMilliseconds(timeout.toMillis())).build()).build();
+			HttpGet request = new HttpGet(uri);
+			request.setHeader("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9");
+			request.setHeader("Accept-Encoding", "gzip");
+			request.setHeader("User-Agent", "TeampleSpace-LinkFetcher/1.0");
+			try (var client = HttpClients.custom().setConnectionManager(manager).disableRedirectHandling()
+					.disableAutomaticRetries().disableContentCompression()
+					.setDefaultRequestConfig(RequestConfig.custom()
+						.setResponseTimeout(Timeout.ofMilliseconds(timeout.toMillis())).build()).build();
+				ClassicHttpResponse response = client.executeOpen(null, request, null)) {
+				int status = response.getCode();
+				if (status >= 300 && status < 400) {
+					uri = redirect(uri, header(response, "Location"));
+					request.cancel();
+					continue;
+				}
+				if (status >= 500 || status == 429 || status == 408) throw failed(true);
+				if (status < 200 || status >= 300) throw failed(false);
+				return read(uri, response, request);
 			}
-			resolve(uri);
-			HttpResponse<InputStream> response = send(uri);
-			int status = response.statusCode();
-			if (status >= 300 && status < 400) {
-				close(response);
-				// 이동할 때마다 새 주소를 처음부터 다시 검사한다
-				uri = redirect(uri, response.headers().firstValue("Location").orElse(null));
-				continue;
-			}
-			if (status >= 500 || status == 429 || status == 408) {
-				close(response);
-				throw failed(true);
-			}
-			if (status < 200 || status >= 300) {
-				close(response);
-				throw failed(false);
-			}
-			return read(uri, response);
+			catch (IOException ex) { throw failed(true); }
+			finally { request.cancel(); manager.close(); }
 		}
 		throw failed(false);
 	}
@@ -111,63 +136,42 @@ public class LinkFetcher {
 		}
 	}
 
-	// 이름 풀이 결과가 모두 공개 주소여야 한다
-	// ponytail: 검사와 연결 사이의 재풀이는 JVM의 이름 풀이 캐시 30초에 기댄다. 실행 환경의 외부 요청 제한과 함께 쓰고
-	// 필요하면 검사한 주소로 직접 연결하는 클라이언트로 바꾼다
-	private void resolve(URI uri) {
+	// 이름 풀이 결과를 검사한 뒤 그대로 연결에 넘긴다
+	private InetAddress[] resolve(URI uri) {
 		int port = uri.getPort() != -1 ? uri.getPort() : uri.getScheme().equals("https") ? 443 : 80;
 		try {
-			for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
-				if (!allowed.test(address, port)) {
-					throw blocked();
-				}
+			InetAddress[] resolved = addresses.resolve(uri.getHost());
+			if (resolved.length == 0) throw failed(true);
+			for (InetAddress address : resolved) {
+				if (!allowed.test(address, port)) throw blocked();
 			}
+			return resolved;
 		}
-		catch (UnknownHostException ex) {
-			throw failed(true);
-		}
+		catch (UnknownHostException ex) { throw failed(true); }
 	}
 
-	private HttpResponse<InputStream> send(URI uri) {
-		HttpRequest request = HttpRequest.newBuilder(uri)
-			.timeout(timeout)
-			.header("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9")
-			.header("Accept-Encoding", "gzip")
-			.header("User-Agent", "TeampleSpace-LinkFetcher/1.0")
-			.GET()
-			.build();
-		try {
-			return client.send(request, HttpResponse.BodyHandlers.ofInputStream());
-		}
-		catch (InterruptedException ex) {
-			Thread.currentThread().interrupt();
-			throw failed(true);
-		}
-		catch (HttpTimeoutException ex) {
-			throw failed(true);
-		}
-		catch (IOException ex) {
-			throw failed(true);
-		}
+	private static String header(ClassicHttpResponse response, String name) {
+		var value = response.getFirstHeader(name);
+		return value == null ? "" : value.getValue();
 	}
 
-	private Page read(URI uri, HttpResponse<InputStream> response) {
-		String contentType = response.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT);
+	private Page read(URI uri, ClassicHttpResponse response, HttpGet request) {
+		String contentType = header(response, "Content-Type").toLowerCase(Locale.ROOT);
 		boolean html = contentType.startsWith("text/html") || contentType.startsWith("application/xhtml+xml");
 		if (!html && !contentType.startsWith("text/plain")) {
-			close(response);
+			request.cancel();
 			throw new JobFailure("LINK_UNSUPPORTED_CONTENT", "글로 읽을 수 없는 문서예요.", false);
 		}
-		if (response.headers().firstValueAsLong("Content-Length").orElse(0) > MAX_BYTES) {
-			close(response);
+		if ((response.getEntity() == null ? 0 : response.getEntity().getContentLength()) > MAX_BYTES) {
+			request.cancel();
 			throw tooLarge();
 		}
 		byte[] body;
 		// 본문이 오다 멈추면 제한 시간 뒤에 연결을 닫아 읽기를 끝낸다
-		var watchdog = CompletableFuture.runAsync(() -> close(response),
+		var watchdog = CompletableFuture.runAsync(request::cancel,
 				CompletableFuture.delayedExecutor(timeout.toMillis(), TimeUnit.MILLISECONDS));
-		try (InputStream raw = response.body();
-				InputStream input = response.headers().firstValue("Content-Encoding").orElse("").equalsIgnoreCase("gzip")
+		try (InputStream raw = response.getEntity() == null ? InputStream.nullInputStream() : response.getEntity().getContent();
+				InputStream input = header(response, "Content-Encoding").equalsIgnoreCase("gzip")
 						? new GZIPInputStream(raw) : raw) {
 			// 압축을 푼 크기로 한도를 잰다
 			body = input.readNBytes(MAX_BYTES + 1);
@@ -277,15 +281,6 @@ public class LinkFetcher {
 		}
 		catch (IllegalArgumentException ex) {
 			return null;
-		}
-	}
-
-	private static void close(HttpResponse<InputStream> response) {
-		try {
-			response.body().close();
-		}
-		catch (IOException ex) {
-			// 닫기 실패는 결과에 영향이 없다
 		}
 	}
 

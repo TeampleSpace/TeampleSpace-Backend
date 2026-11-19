@@ -140,6 +140,26 @@ class LinkFetcherTests {
 	}
 
 	@Test
+	void connectsOnlyToTheAlreadyCheckedAddress() throws Exception {
+		AtomicInteger resolutions = new AtomicInteger();
+		int port = server.getAddress().getPort();
+		LinkFetcher pinned = new LinkFetcher((address, requested) -> address.isLoopbackAddress() && requested == port,
+				Duration.ofSeconds(2), host -> resolutions.incrementAndGet() == 1
+						? new InetAddress[] { InetAddress.getByName("127.0.0.1") }
+						: new InetAddress[] { InetAddress.getByName("10.0.0.7") });
+		assertThat(pinned.fetch("http://rebind.example:" + port + "/page").title()).isEqualTo("대학의 일회용품 감축 사례");
+		assertThat(resolutions).hasValue(1);
+	}
+
+	@Test
+	void rejectsMixedPublicAndPrivateAnswersBeforeConnecting() {
+		LinkFetcher mixed = new LinkFetcher((address, port) -> LinkFetcher.isPublic(address), Duration.ofSeconds(2),
+				host -> new InetAddress[] { InetAddress.getByName("93.184.216.34"), InetAddress.getByName("127.0.0.1") });
+		assertThat(failure(mixed, "http://rebind.example/internal").code()).isEqualTo("LINK_BLOCKED");
+		assertThat(internalHits).hasValue(0);
+	}
+
+	@Test
 	void extractsTitleAndReadableTextFromHtml() {
 		LinkFetcher.Page page = local.fetch(base + "/page");
 		assertThat(page.title()).isEqualTo("대학의 일회용품 감축 사례");
