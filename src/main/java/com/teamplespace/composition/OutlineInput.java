@@ -79,7 +79,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		}
 	}
 
-	private static UUID uuid(JsonNode node, String field) {
+	static UUID uuid(JsonNode node, String field) {
 		if (node.isString()) {
 			String value = node.asString();
 			try {
@@ -94,7 +94,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		throw invalid(field, "식별자를 확인해 주세요.");
 	}
 
-	private static String text(JsonNode node, String field, int max) {
+	static String text(JsonNode node, String field, int max) {
 		if (!node.isString()) {
 			throw invalid(field, "입력 형식과 글자 수를 확인해 주세요.");
 		}

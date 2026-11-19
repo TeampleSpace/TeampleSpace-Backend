@@ -463,5 +463,35 @@
     "example": "outline-sources-put-request.json",
     "schema": "stage-3.schema.json#/$defs/OutlineSourcesPutRequest",
     "valid": true
+  },
+  {
+    "example": "template-catalog.json",
+    "schema": "stage-3-design.schema.json#/$defs/TemplateCatalog",
+    "valid": true
+  },
+  {
+    "example": "design-template-put-request.json",
+    "schema": "stage-3-design.schema.json#/$defs/DesignSettingsPutRequest",
+    "valid": true
+  },
+  {
+    "example": "design-custom-put-request.json",
+    "schema": "stage-3-design.schema.json#/$defs/DesignSettingsPutRequest",
+    "valid": true
+  },
+  {
+    "example": "design-settings-unset.json",
+    "schema": "api.schema.json#/$defs/DesignSettings",
+    "valid": true
+  },
+  {
+    "example": "design-settings-custom.json",
+    "schema": "api.schema.json#/$defs/DesignSettings",
+    "valid": true
+  },
+  {
+    "example": "invalid/design-mixed-mode.json",
+    "schema": "stage-3-design.schema.json#/$defs/DesignSettingsPutRequest",
+    "valid": false
   }
 ]
