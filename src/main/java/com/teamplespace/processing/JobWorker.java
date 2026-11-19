@@ -1,11 +1,12 @@
 package com.teamplespace.processing;
 
 import java.util.Optional;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,7 +29,7 @@ public class JobWorker {
 
 	private final String workerId = "api-" + UUID.randomUUID();
 
-	private final Set<JobQueue.Claim> running = ConcurrentHashMap.newKeySet();
+	private final Map<JobQueue.Claim, FutureTask<Void>> running = new ConcurrentHashMap<>();
 
 	public JobWorker(JobQueue queue, @Value("${teamplespace.jobs.concurrency:2}") int concurrency) {
 		this.queue = queue;
@@ -44,22 +45,36 @@ public class JobWorker {
 			if (claim.isEmpty()) {
 				return;
 			}
-			running.add(claim.get());
+			JobQueue.Claim next = claim.get();
+			FutureTask<Void> task = new FutureTask<>(() -> {
+				queue.run(next);
+				return null;
+			});
+			running.put(next, task);
 			pool.execute(() -> {
 				try {
-					queue.run(claim.get());
+					task.run();
 				}
 				finally {
-					running.remove(claim.get());
+					running.remove(next);
 				}
 			});
 		}
 	}
 
-	// 임대를 잃은 실행은 멈추지 않아도 결과가 반영되지 않는다
+	// 취소를 확정한 뒤 실행에 중단을 알린다. 늦은 결과는 임대 검사에서 거절한다
 	@Scheduled(fixedDelayString = "${teamplespace.jobs.heartbeat-interval:15s}")
 	public void heartbeat() {
-		running.forEach(queue::heartbeat);
+		running.forEach((claim, task) -> {
+			JobQueue.Lease lease = queue.heartbeat(claim);
+			if (lease == JobQueue.Lease.CANCEL_REQUESTED) {
+				queue.acknowledgeCancellation(claim);
+				task.cancel(true);
+			}
+			else if (lease == JobQueue.Lease.LOST) {
+				task.cancel(true);
+			}
+		});
 	}
 
 	@PreDestroy
