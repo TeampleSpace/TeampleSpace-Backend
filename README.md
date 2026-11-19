@@ -84,6 +84,21 @@ set -a && source .env && set +a
 - PPTX와 PDF 출력은 실험만 했다. 방법과 결과는 `experiments/export/README.md`에 있다
 - 0단계에서 끝낸 것과 남은 확인 사항, 실행한 검증은 `docs/stage-0-result.md`에 있다
 
+## 작업 처리
+
+오래 걸리는 처리는 요청과 분리해 `jobs` 테이블에 등록하고 API 프로세스 안의 실행 풀이 처리한다. 경로와 상태 전이는 `contracts/stage-2.md`에 있다
+
+- `JobQueue`가 등록, 임대 선점, 임대 연장, 완료, 실패, 취소를 맡는다. 잠금은 프로젝트, 작업 순서로 잡는다
+- 실행자는 `FOR UPDATE SKIP LOCKED`로 대기 작업을 선점하고 60초 임대를 15초마다 연장한다
+- 임대가 만료되면 같은 작업이 대기로 돌아가고 시도 횟수가 오른다. 3번을 넘으면 실패로 끝난다
+- 결과는 시도 번호와 임대 토큰이 지금 임대와 같을 때만 반영한다. 취소가 요청된 작업의 결과는 버린다
+- 작업 종류마다 `JobHandler`를 구현한다. 실행은 트랜잭션 밖에서, 결과 저장은 완료 트랜잭션 안에서 한다
+
+| 이름 | 용도 | 기본값 |
+| --- | --- | --- |
+| `JOBS_WORKER_ENABLED` | 이 프로세스에서 실행 풀을 돌릴지 | `true` |
+| `JOBS_CONCURRENCY` | 동시에 처리할 작업 수 | `2` |
+
 ## CI
 
 `.github/workflows/ci.yml`이 PR과 기본 브랜치 푸시마다 `compose.yaml`의 MySQL 8.4를 띄우고 `./gradlew build`로 빌드와 테스트를 실행한다.

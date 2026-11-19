@@ -45,6 +45,7 @@ public class ProjectEvents {
 	}
 
 	// 프로젝트 잠금을 잡은 트랜잭션 안에서만 호출한다. 문서 변경과 함께 커밋된다
+	// 실행자가 만든 변경처럼 요청한 사용자가 없으면 actorId는 null이다
 	public long append(UUID projectId, String type, UUID actorId, String mutationId, UUID resourceId,
 			JsonNode payload) {
 		jdbc.sql("UPDATE projects SET event_seq = event_seq + 1 WHERE id = UUID_TO_BIN(:project)")
@@ -59,7 +60,7 @@ public class ProjectEvents {
 			.param("project", projectId.toString())
 			.param("seq", seq)
 			.param("type", type)
-			.param("actor", actorId.toString())
+			.param("actor", actorId == null ? null : actorId.toString())
 			.param("mutation", mutationId)
 			.param("resource", resourceId.toString())
 			.param("payload", json.writeValueAsString(payload))
