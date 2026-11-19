@@ -156,8 +156,12 @@
       }
     },
     "MaterialCreated": {
+      "description": "job은 material.job과 같은 작업이다. 마크다운 자료는 null이고 파일과 링크 자료는 작업 객체다",
       "type": "object",
       "additionalProperties": false,
+      "if": { "properties": { "material": { "properties": { "kind": { "const": "memo" } } } } },
+      "then": { "properties": { "job": { "type": "null" } } },
+      "else": { "properties": { "job": { "type": "object" } } },
       "required": ["material", "job"],
       "properties": {
         "material": { "$ref": "#/$defs/Material" },

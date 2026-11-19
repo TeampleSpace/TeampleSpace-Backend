@@ -403,5 +403,15 @@
     "example": "invalid/material-memo-with-job.json",
     "schema": "stage-2.schema.json#/$defs/Material",
     "valid": false
+  },
+  {
+    "example": "invalid/material-created-file-without-job.json",
+    "schema": "stage-2.schema.json#/$defs/MaterialCreated",
+    "valid": false
+  },
+  {
+    "example": "invalid/material-created-memo-with-job.json",
+    "schema": "stage-2.schema.json#/$defs/MaterialCreated",
+    "valid": false
   }
 ]
