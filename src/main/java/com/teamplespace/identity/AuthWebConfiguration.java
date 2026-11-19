@@ -34,7 +34,8 @@ public class AuthWebConfiguration implements WebMvcConfigurer {
 			public boolean preHandle(HttpServletRequest req,HttpServletResponse res,Object handler) {
 				res.setHeader("Cache-Control","no-store");res.setHeader("Referrer-Policy","no-referrer");
 				res.setHeader("X-Content-Type-Options","nosniff");
-				if(!Set.of("GET","HEAD","OPTIONS").contains(req.getMethod())) auth.checkWrite(req);
+				// 파일 전송은 서명한 주소와 세션으로 확인하고 CSRF 헤더를 받지 않는다
+				if(!Set.of("GET","HEAD","OPTIONS").contains(req.getMethod())&&!req.getRequestURI().startsWith("/v1/storage/uploads/")) auth.checkWrite(req);
 				return true;
 			}
 		}).addPathPatterns("/v1/**");

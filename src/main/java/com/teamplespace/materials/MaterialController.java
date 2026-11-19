@@ -21,6 +21,8 @@ import com.teamplespace.materials.MaterialService.DeleteRequest;
 import com.teamplespace.materials.MaterialService.MemoRequest;
 import com.teamplespace.materials.MaterialService.NoteRequest;
 import com.teamplespace.materials.MaterialService.PatchRequest;
+import com.teamplespace.materials.UploadService.FileRequest;
+import com.teamplespace.materials.UploadService.UploadRequest;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -31,11 +33,32 @@ public class MaterialController {
 
 	private final MaterialService materials;
 
+	private final UploadService uploads;
+
 	private final AuthService auth;
 
-	public MaterialController(MaterialService materials, AuthService auth) {
+	public MaterialController(MaterialService materials, UploadService uploads, AuthService auth) {
 		this.materials = materials;
+		this.uploads = uploads;
 		this.auth = auth;
+	}
+
+	@PostMapping("/projects/{projectId}/uploads")
+	ResponseEntity<?> prepareUpload(@PathVariable UUID projectId, @RequestBody UploadRequest input,
+			HttpServletRequest request) {
+		return ResponseEntity.status(201).body(uploads.prepare(actor(request), projectId, input));
+	}
+
+	@PostMapping("/projects/{projectId}/materials/file")
+	ResponseEntity<?> createFile(@PathVariable UUID projectId, @RequestBody FileRequest input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.status(201).body(uploads.createFile(actor(request), projectId, input, key));
+	}
+
+	@PostMapping("/materials/{materialId}/reprocess")
+	ResponseEntity<?> reprocess(@PathVariable UUID materialId,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.status(201).body(materials.reprocess(actor(request), materialId, key));
 	}
 
 	@GetMapping("/projects/{projectId}/materials")
