@@ -40,6 +40,7 @@ public enum ErrorCode {
 	UPLOAD_REJECTED(422, false, "파일을 확인하지 못했어요. 다시 선택해 주세요."),
 	UPLOAD_ALREADY_USED(409, false, "이미 등록한 업로드예요."),
 	FILE_URL_EXPIRED(403, false, "주소가 만료됐어요."),
+	INVALID_URL(422, false, "주소를 확인해 주세요."),
 	VERSION_CONFLICT(409, false, "이후 수정이 있어요."),
 	IDEMPOTENCY_KEY_REUSED(409, false, "같은 멱등키로 다른 요청을 보냈어요."),
 	REQUEST_IN_PROGRESS(409, true, "같은 요청을 처리하고 있어요."),

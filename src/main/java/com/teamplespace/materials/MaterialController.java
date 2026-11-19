@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.teamplespace.identity.AuthService;
 import com.teamplespace.materials.MaterialService.DeleteRequest;
+import com.teamplespace.materials.MaterialService.LinkRequest;
 import com.teamplespace.materials.MaterialService.MemoRequest;
 import com.teamplespace.materials.MaterialService.NoteRequest;
 import com.teamplespace.materials.MaterialService.PatchRequest;
@@ -53,6 +54,12 @@ public class MaterialController {
 	ResponseEntity<?> createFile(@PathVariable UUID projectId, @RequestBody FileRequest input,
 			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
 		return ResponseEntity.status(201).body(uploads.createFile(actor(request), projectId, input, key));
+	}
+
+	@PostMapping("/projects/{projectId}/materials/link")
+	ResponseEntity<?> createLink(@PathVariable UUID projectId, @RequestBody LinkRequest input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.status(201).body(materials.createLink(actor(request), projectId, input, key));
 	}
 
 	@PostMapping("/materials/{materialId}/reprocess")

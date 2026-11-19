@@ -204,8 +204,8 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 업로드 준비 | `POST /v1/projects/{projectId}/uploads` | `UploadRequest`, `UploadTicket` | 형식과 크기 검사, 서명한 전송 주소 발급 구현 | 2단계 |
 | 파일 자료 등록 | `POST /v1/projects/{projectId}/materials/file` | `FileMaterialRequest`, `MaterialCreated` | 크기, 체크섬, PDF 형식 검사 뒤 원본 확정과 멱등 등록 구현 | 2단계 |
 | 분석 다시 시도 | `POST /v1/materials/{materialId}/reprocess` | `MaterialCreated` | 보관한 원본으로 새 작업을 만드는 멱등 요청 구현 | 2단계 |
-| 원문 조회 | `GET /v1/materials/{materialId}/source` | `MaterialSource` | 마크다운과 파일 자료 구현. 링크는 형식만 | 2단계 |
-| 링크 자료 등록 | `POST /v1/projects/{projectId}/materials/link` | `LinkMaterialRequest`, `MaterialCreated` | 형식만 | 2단계 |
+| 원문 조회 | `GET /v1/materials/{materialId}/source` | `MaterialSource` | 구현. 파일은 짧게 유효한 주소, 마크다운과 링크는 본문을 돌려준다 | 2단계 |
+| 링크 자료 등록 | `POST /v1/projects/{projectId}/materials/link` | `LinkMaterialRequest`, `MaterialCreated` | 주소 검사와 멱등 등록, 내부망을 막는 수집 작업 구현 | 2단계 |
 
 단계 번호는 개발 순서의 번호다. 1은 인증과 프로젝트, 2는 자료, 3은 구성과 디자인, 4는 편집과 공유 저장, 5는 최초 생성, 6은 이력과 검토, 7은 발표와 내보내기다.
 

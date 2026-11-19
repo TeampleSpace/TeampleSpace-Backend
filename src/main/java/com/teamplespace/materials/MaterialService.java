@@ -37,6 +37,9 @@ public class MaterialService {
 	public record MemoRequest(String title, String markdown) {
 	}
 
+	public record LinkRequest(String url, String title, String description) {
+	}
+
 	public record PatchRequest(Long expectedVersion, String title, String description, String markdown) {
 	}
 
@@ -195,6 +198,27 @@ public class MaterialService {
 		return result;
 	}
 
+	// 주소 형식만 확인해 등록하고 수집은 분석 작업이 한다. 실패해도 주소와 설명은 자료에 남는다
+	@Transactional
+	public Map<String, Object> createLink(UUID actor, UUID projectId, LinkRequest input, String keyValue) {
+		access.lock(projectId);
+		access.requireMember(projectId, actor);
+		String url = LinkFetcher.normalize(input.url());
+		String title = title(input.title(), false);
+		String description = text(input.description(), "description", DESCRIPTION_MAX, false).strip();
+		var key = key(actor, "/v1/projects/" + projectId + "/materials/link", keyValue);
+		var stored = idempotency.findOrClaim(key, CanonicalJson.sha256(json.valueToTree(input)));
+		if (stored.isPresent()) {
+			return read(stored.get().body());
+		}
+		// 제목을 비우면 호스트를 임시 제목으로 쓴다
+		UUID id = insert(projectId, actor, "link", title.isEmpty() ? java.net.URI.create(url).getHost() : title,
+				description.isEmpty() ? null : description, "processing", url);
+		Map<String, Object> result = startAnalysis(actor, id);
+		idempotency.complete(key, true, 201, json.writeValueAsString(result), id);
+		return result;
+	}
+
 	@Transactional
 	public Map<String, Object> patch(UUID actor, UUID materialId, PatchRequest input) {
 		Row row = writable(actor, materialId);
@@ -268,7 +292,8 @@ public class MaterialService {
 		}
 		UUID revision = revisionId == null ? row.currentRevisionId() : revisionId;
 		return jdbc.sql("""
-				SELECT BIN_TO_UUID(r.id) AS id, r.revision_no, r.markdown, r.page_count,
+				SELECT BIN_TO_UUID(r.id) AS id, r.revision_no, r.markdown, r.page_count, r.source_url, r.source_title,
+				       r.extracted_text,
 				       BIN_TO_UUID(f.id) AS file_id, f.mime_type, f.size_bytes, up.original_name
 				FROM material_revisions r
 				LEFT JOIN file_objects f ON f.id = r.source_file_id
@@ -296,7 +321,14 @@ public class MaterialService {
 			}
 			source.put("file", file);
 			source.put("markdown", row.kind().equals("memo") ? rs.getString("markdown") : null);
-			source.put("link", null);
+			Map<String, Object> link = null;
+			if (row.kind().equals("link")) {
+				link = new LinkedHashMap<>();
+				link.put("url", rs.getString("source_url"));
+				link.put("title", rs.getString("source_title"));
+				link.put("text", rs.getString("extracted_text"));
+			}
+			source.put("link", link);
 			return source;
 		}).optional().orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
 	}

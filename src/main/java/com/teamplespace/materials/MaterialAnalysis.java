@@ -13,6 +13,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
+import com.teamplespace.platform.json.CanonicalJson;
 import com.teamplespace.processing.JobFailure;
 import com.teamplespace.processing.JobHandler;
 import com.teamplespace.processing.JobQueue.Job;
@@ -31,7 +32,7 @@ public class MaterialAnalysis implements JobHandler {
 
 	// 실행 결과. 저장은 완료 트랜잭션에서 한다
 	record Analysis(UUID fileId, byte[] contentHash, Integer pageCount, String text, List<Chunk> chunks,
-			String extractor) {
+			String extractor, String sourceUrl, String sourceTitle) {
 	}
 
 	private static final int CHUNK_CHARS = 4000;
@@ -49,7 +50,11 @@ public class MaterialAnalysis implements JobHandler {
 
 	private final MaterialService materials;
 
-	public MaterialAnalysis(JdbcClient jdbc, ObjectMapper json, FileStorage storage, MaterialService materials) {
+	private final LinkFetcher links;
+
+	public MaterialAnalysis(JdbcClient jdbc, ObjectMapper json, FileStorage storage, MaterialService materials,
+			LinkFetcher links) {
+		this.links = links;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.storage = storage;
@@ -64,7 +69,7 @@ public class MaterialAnalysis implements JobHandler {
 	@Override
 	public Object execute(Job job) {
 		Map<String, Object> source = jdbc.sql("""
-				SELECT m.kind, m.deleted_at, BIN_TO_UUID(f.id) AS file_id, f.bucket_key, f.checksum
+				SELECT m.kind, m.deleted_at, m.source_url, BIN_TO_UUID(f.id) AS file_id, f.bucket_key, f.checksum
 				FROM materials m LEFT JOIN file_objects f ON f.id = m.source_file_id
 				WHERE m.id = UUID_TO_BIN(?)
 				""").param(job.targetId().toString()).query().listOfRows().stream().findFirst().orElse(null);
@@ -74,6 +79,15 @@ public class MaterialAnalysis implements JobHandler {
 		if (source.get("kind").equals("file")) {
 			return pdf(UUID.fromString((String) source.get("file_id")), (String) source.get("bucket_key"),
 					(byte[]) source.get("checksum"));
+		}
+		if (source.get("kind").equals("link")) {
+			LinkFetcher.Page page = links.fetch((String) source.get("source_url"));
+			List<Chunk> chunks = new ArrayList<>();
+			String text = page.text().substring(0, Math.min(page.text().length(), MAX_TEXT_CHARS));
+			for (int start = 0; start < text.length(); start += CHUNK_CHARS) {
+				chunks.add(new Chunk(text.substring(start, Math.min(text.length(), start + CHUNK_CHARS)), null));
+			}
+			return new Analysis(null, CanonicalJson.sha256(text), null, text, chunks, "jsoup-1", page.url(), page.title());
 		}
 		throw new JobFailure("ANALYSIS_FAILED", "자료를 분석하지 못했어요.", false);
 	}
@@ -99,6 +113,8 @@ public class MaterialAnalysis implements JobHandler {
 		columns.put("excerptPage", lead == null ? null : lead.page());
 		columns.put("contentHash", analysis.contentHash());
 		columns.put("extractor", analysis.extractor());
+		columns.put("sourceUrl", analysis.sourceUrl());
+		columns.put("sourceTitle", analysis.sourceTitle());
 		// 요약 모델이 정해지면 여기서 summary를 채운다
 		UUID revisionId = materials.addRevision(row, job.requesterId(), columns);
 		int ordinal = 0;
@@ -110,6 +126,13 @@ public class MaterialAnalysis implements JobHandler {
 				.params(UUID.randomUUID().toString(), row.projectId().toString(), revisionId.toString(), ordinal++,
 						chunk.page(), chunk.page(), chunk.text())
 				.update();
+		}
+		// 제목을 비워 등록한 링크는 수집한 문서 제목을 쓴다. 그사이 사용자가 바꾼 이름은 그대로 둔다
+		if (analysis.sourceTitle() != null && row.kind().equals("link")) {
+			jdbc.sql("""
+					UPDATE materials SET title = ?
+					WHERE id = UUID_TO_BIN(?) AND title = SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(source_url, '://', -1), '/', 1), ':', 1)
+					""").params(analysis.sourceTitle(), row.id().toString()).update();
 		}
 		materials.markReady(row.id());
 		ObjectNode result = json.createObjectNode();
@@ -150,7 +173,7 @@ public class MaterialAnalysis implements JobHandler {
 					chunks.add(new Chunk(text.substring(start, Math.min(text.length(), start + CHUNK_CHARS)), page));
 				}
 			}
-			return new Analysis(fileId, checksum, pages, all.toString().strip(), chunks, "pdfbox-3");
+			return new Analysis(fileId, checksum, pages, all.toString().strip(), chunks, "pdfbox-3", null, null);
 		}
 		catch (JobFailure failure) {
 			throw failure;
@@ -171,7 +194,21 @@ public class MaterialAnalysis implements JobHandler {
 
 	// 저장할 수 없는 제어 문자를 지우고 줄 끝 공백을 정리한다
 	static String clean(String text) {
-		return text.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "").replaceAll("[ \\t]+\\n", "\n").strip();
+		StringBuilder cleaned = new StringBuilder(text.length());
+		int lineEnd = 0;
+		for (int index = 0; index < text.length(); index++) {
+			char value = text.charAt(index);
+			if (value == '\n') {
+				cleaned.setLength(lineEnd);
+				cleaned.append(value);
+				lineEnd = cleaned.length();
+			}
+			else if ((value >= ' ' && value != 127) || value == '\t') {
+				cleaned.append(value);
+				if (value != ' ' && value != '\t') lineEnd = cleaned.length();
+			}
+		}
+		return cleaned.toString().strip();
 	}
 
 }
