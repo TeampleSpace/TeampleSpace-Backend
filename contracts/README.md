@@ -193,6 +193,7 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 디자인 설정 조회 | `GET /v1/projects/{projectId}/design-settings` | `DesignSettings` | 형식만 | 3단계 |
 | 발표 구성 조회 | `GET /v1/projects/{projectId}/outline` | `Outline` | 현재 구성과 고정된 자료 개정 조회 | 3단계 |
 | 발표 구성 저장 | `PUT /v1/projects/{projectId}/outline` | `OutlinePutRequest`, `Outline` | 버전 비교와 멱등 저장, [발표 구성 계약](stage-3.md) | 3단계 |
+| 발표 항목 근거 교체 | `PUT /v1/outline-items/{itemId}/sources` | `OutlineSourcesPutRequest`, `Outline` | 한 항목의 자료 근거를 버전 비교로 교체 | 3단계 |
 | 프로젝트 작업 목록 | `GET /v1/projects/{projectId}/jobs` | `JobList` | 필터와 커서 페이지, 프로젝트 권한 확인 구현 | 2단계 |
 | 작업 조회 | `GET /v1/jobs/{jobId}` | `Job` | 구현. 임대 선점과 내부 재시도, 시험이 있다 | 2단계 |
 | 작업 취소 | `POST /v1/jobs/{jobId}/cancel` | `Job` | 구현. 요청자와 소유자만 취소하고 완료와의 경합 시험이 있다 | 2단계 |

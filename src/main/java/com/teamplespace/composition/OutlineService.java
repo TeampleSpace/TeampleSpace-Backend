@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -106,14 +107,61 @@ public class OutlineService {
 					""").params(outlineId.toString(), projectId.toString(), version, actor.toString()).update();
 		}
 		else {
-			jdbc.sql("UPDATE outlines SET version = ?, updated_by = UUID_TO_BIN(?) WHERE id = UUID_TO_BIN(?)")
-				.params(version, actor.toString(), outlineId.toString()).update();
+			updateVersion(actor, outlineId, version);
 			jdbc.sql("DELETE FROM outline_items WHERE outline_id = UUID_TO_BIN(?)").param(outlineId.toString()).update();
 		}
 		storeItems(projectId, outlineId, replacement);
 		events.append(projectId, "outline.updated", actor, null, outlineId,
 				json.createObjectNode().put("outlineVersion", version));
 		return complete(key, 200, json.valueToTree(new Outline(projectId, version, replacement)), outlineId);
+	}
+
+	@Transactional
+	public SaveResult replaceSources(UUID actor, UUID itemId, String keyValue, JsonNode body) {
+		var key = keyValue == null || keyValue.isBlank() || keyValue.length() > 128 ? null
+				: IdempotencyStore.Key.of(actor, "PUT", "/v1/outline-items/" + itemId + "/sources", keyValue);
+		UUID projectId = jdbc.sql("SELECT BIN_TO_UUID(project_id) FROM outline_items WHERE id = UUID_TO_BIN(?)")
+			.param(itemId.toString()).query(String.class).optional().map(UUID::fromString)
+			.or(() -> key == null ? Optional.empty() : idempotency.findResource(key))
+			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+		access.lock(projectId);
+		access.requireMember(projectId, actor);
+		if (key == null) {
+			throw new ApiException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+		}
+		var stored = idempotency.findOrClaim(key, CanonicalJson.sha256(body));
+		if (stored.isPresent()) {
+			return new SaveResult(stored.get().status(), json.readTree(stored.get().body()));
+		}
+		OutlineInput.checkFields(body, Set.of("expectedVersion", "sourceIds"), "outline");
+		long expected = OutlineInput.expectedVersion(body);
+		List<UUID> sourceIds = OutlineInput.sources(body.path("sourceIds"), "sourceIds");
+		OutlineRow current = find(projectId);
+		if (expected != current.version()) {
+			return complete(key, 409, json.createObjectNode().put("outlineVersion", current.version()), projectId);
+		}
+		if (current.version() == OutlineInput.MAX_VERSION) {
+			throw new ApiException(ErrorCode.SERVICE_UNAVAILABLE);
+		}
+		List<Item> currentItems = current.id() == null ? List.of() : items(current.id());
+		Item target = currentItems.stream().filter(item -> item.id().equals(itemId)).findFirst()
+			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+		List<SourceRef> refs = resolve(sourceIds, readySources(projectId, sourceIds), "sourceIds");
+		Item updated = new Item(itemId, target.title(), target.summary(), target.position(), refs);
+		jdbc.sql("DELETE FROM outline_sources WHERE outline_item_id = UUID_TO_BIN(?)").param(itemId.toString()).update();
+		storeSources(projectId, List.of(updated));
+		long version = current.version() + 1;
+		updateVersion(actor, current.id(), version);
+		events.append(projectId, "outline.updated", actor, null, current.id(),
+				json.createObjectNode().put("outlineVersion", version));
+		List<Item> updatedItems = new ArrayList<>(currentItems);
+		updatedItems.set(target.position(), updated);
+		return complete(key, 200, json.valueToTree(new Outline(projectId, version, updatedItems)), projectId);
+	}
+
+	private void updateVersion(UUID actor, UUID outlineId, long version) {
+		jdbc.sql("UPDATE outlines SET version = ?, updated_by = UUID_TO_BIN(?) WHERE id = UUID_TO_BIN(?)")
+			.params(version, actor.toString(), outlineId.toString()).update();
 	}
 
 	private SaveResult complete(IdempotencyStore.Key key, int status, JsonNode body, UUID resource) {
@@ -170,19 +218,23 @@ public class OutlineService {
 			if (item.id() != null && !existing.contains(item.id())) {
 				throw OutlineInput.invalid("items[" + position + "].id", "이 발표 구성의 항목을 선택해 주세요.");
 			}
-			List<SourceRef> sources = new ArrayList<>();
-			for (int index = 0; index < item.sourceIds().size(); index++) {
-				SourceRef source = allowed.get(item.sourceIds().get(index));
-				if (source == null) {
-					throw OutlineInput.invalid("items[" + position + "].sourceIds[" + index + "]",
-							"같은 프로젝트에서 이용할 수 있는 자료를 선택해 주세요.");
-				}
-				sources.add(source);
-			}
+			List<SourceRef> sources = resolve(item.sourceIds(), allowed, "items[" + position + "].sourceIds");
 			UUID id = item.id() == null ? UUID.randomUUID() : item.id();
-			result.add(new Item(id, item.title(), item.summary(), position, List.copyOf(sources)));
+			result.add(new Item(id, item.title(), item.summary(), position, sources));
 		}
 		return List.copyOf(result);
+	}
+
+	private List<SourceRef> resolve(List<UUID> ids, Map<UUID, SourceRef> allowed, String field) {
+		List<SourceRef> sources = new ArrayList<>();
+		for (int index = 0; index < ids.size(); index++) {
+			SourceRef source = allowed.get(ids.get(index));
+			if (source == null) {
+				throw OutlineInput.invalid(field + "[" + index + "]", "같은 프로젝트에서 이용할 수 있는 자료를 선택해 주세요.");
+			}
+			sources.add(source);
+		}
+		return List.copyOf(sources);
 	}
 
 	private Map<UUID, SourceRef> readySources(UUID projectId, List<UUID> ids) {
@@ -207,21 +259,24 @@ public class OutlineService {
 	}
 
 	private void storeItems(UUID projectId, UUID outlineId, List<Item> items) {
-		List<Object[]> rows = new ArrayList<>();
-		List<Object[]> sources = new ArrayList<>();
-		for (Item item : items) {
-			rows.add(new Object[] { item.id().toString(), projectId.toString(), outlineId.toString(),
-					item.title(), item.summary(), item.position() });
-			for (int position = 0; position < item.sourceRefs().size(); position++) {
-				sources.add(new Object[] { item.id().toString(), item.sourceRefs().get(position).revisionId().toString(),
-						projectId.toString(), position });
-			}
-		}
-		if (!rows.isEmpty()) {
+		if (!items.isEmpty()) {
+			List<Object[]> rows = items.stream().map(item -> new Object[] { item.id().toString(),
+					projectId.toString(), outlineId.toString(), item.title(), item.summary(), item.position() }).toList();
 			batches.batchUpdate("""
 					INSERT INTO outline_items(id, project_id, outline_id, title, summary, position)
 					VALUES(UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?, ?)
 					""", rows);
+		}
+		storeSources(projectId, items);
+	}
+
+	private void storeSources(UUID projectId, List<Item> items) {
+		List<Object[]> sources = new ArrayList<>();
+		for (Item item : items) {
+			for (int position = 0; position < item.sourceRefs().size(); position++) {
+				sources.add(new Object[] { item.id().toString(), item.sourceRefs().get(position).revisionId().toString(),
+						projectId.toString(), position });
+			}
 		}
 		if (!sources.isEmpty()) {
 			batches.batchUpdate("""

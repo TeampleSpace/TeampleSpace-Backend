@@ -114,6 +114,27 @@
           }
         }
       }
+    },
+    "OutlineSourcesPutRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedVersion",
+        "sourceIds"
+      ],
+      "properties": {
+        "expectedVersion": {
+          "$ref": "api.schema.json#/$defs/Version"
+        },
+        "sourceIds": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "api.schema.json#/$defs/Uuid"
+          }
+        }
+      }
     }
   }
 }

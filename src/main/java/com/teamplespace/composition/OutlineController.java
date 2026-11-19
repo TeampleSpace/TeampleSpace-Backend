@@ -17,7 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import tools.jackson.databind.JsonNode;
 
 @RestController
-@RequestMapping("/v1/projects/{projectId}/outline")
+@RequestMapping("/v1")
 public class OutlineController {
 
 	private final AuthService auth;
@@ -28,15 +28,24 @@ public class OutlineController {
 		this.outlines = outlines;
 	}
 
-	@GetMapping
+	@GetMapping("/projects/{projectId}/outline")
 	OutlineService.Outline get(@PathVariable UUID projectId, HttpServletRequest request) {
 		return outlines.get(auth.requireOnboarded(request).userId(), projectId);
 	}
 
-	@PutMapping
+	@PutMapping("/projects/{projectId}/outline")
 	JsonNode save(@PathVariable UUID projectId, @RequestBody JsonNode input,
 			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
-		var result = outlines.save(auth.requireOnboarded(request).userId(), projectId, key, input);
+		return saved(outlines.save(auth.requireOnboarded(request).userId(), projectId, key, input));
+	}
+
+	@PutMapping("/outline-items/{itemId}/sources")
+	JsonNode sources(@PathVariable UUID itemId, @RequestBody JsonNode input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return saved(outlines.replaceSources(auth.requireOnboarded(request).userId(), itemId, key, input));
+	}
+
+	private JsonNode saved(OutlineService.SaveResult result) {
 		if (result.status() == 409) {
 			throw ApiException.conflict("outlineVersion", result.body().get("outlineVersion").asLong());
 		}
