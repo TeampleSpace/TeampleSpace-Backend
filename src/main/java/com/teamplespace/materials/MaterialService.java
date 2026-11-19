@@ -2,6 +2,9 @@ package com.teamplespace.materials;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -11,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,8 +75,18 @@ public class MaterialService {
 
 	private final JobQueue jobs;
 
+	private final FileStorage storage;
+
+	private final Clock clock;
+
+	private final Duration sourceUrlTtl;
+
 	public MaterialService(JdbcClient jdbc, ObjectMapper json, ProjectAccess access, ProjectEvents events,
-			IdempotencyStore idempotency, JobQueue jobs) {
+			IdempotencyStore idempotency, JobQueue jobs, FileStorage storage, Clock clock,
+			@Value("${teamplespace.storage.source-url-ttl:5m}") Duration sourceUrlTtl) {
+		this.storage = storage;
+		this.clock = clock;
+		this.sourceUrlTtl = sourceUrlTtl;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.access = access;
@@ -254,8 +268,12 @@ public class MaterialService {
 		}
 		UUID revision = revisionId == null ? row.currentRevisionId() : revisionId;
 		return jdbc.sql("""
-				SELECT BIN_TO_UUID(id) AS id, revision_no, markdown FROM material_revisions
-				WHERE id = UUID_TO_BIN(:revision) AND material_id = UUID_TO_BIN(:material)
+				SELECT BIN_TO_UUID(r.id) AS id, r.revision_no, r.markdown, r.page_count,
+				       BIN_TO_UUID(f.id) AS file_id, f.mime_type, f.size_bytes, up.original_name
+				FROM material_revisions r
+				LEFT JOIN file_objects f ON f.id = r.source_file_id
+				LEFT JOIN uploads up ON up.file_object_id = f.id
+				WHERE r.id = UUID_TO_BIN(:revision) AND r.material_id = UUID_TO_BIN(:material)
 				""").param("revision", revision.toString()).param("material", materialId.toString()).query((rs, n) -> {
 			Map<String, Object> source = new LinkedHashMap<>();
 			source.put("materialId", materialId.toString());
@@ -263,11 +281,79 @@ public class MaterialService {
 			source.put("sourceVersion", rs.getLong("revision_no"));
 			source.put("kind", row.kind());
 			source.put("title", row.title());
-			source.put("file", null);
-			source.put("markdown", rs.getString("markdown"));
+			Map<String, Object> file = null;
+			if (row.kind().equals("file")) {
+				// 주소는 발급할 때마다 권한을 확인하고 짧게만 유효하다
+				Instant expiresAt = clock.instant().plus(sourceUrlTtl).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+				file = new LinkedHashMap<>();
+				file.put("url", "/v1/storage/files/"
+						+ storage.sign("file", UUID.fromString(rs.getString("file_id")), expiresAt));
+				file.put("expiresAt", expiresAt);
+				file.put("mimeType", rs.getString("mime_type"));
+				file.put("fileName", rs.getString("original_name"));
+				file.put("sizeBytes", rs.getLong("size_bytes"));
+				file.put("pageCount", rs.getInt("page_count"));
+			}
+			source.put("file", file);
+			source.put("markdown", row.kind().equals("memo") ? rs.getString("markdown") : null);
 			source.put("link", null);
 			return source;
 		}).optional().orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+	}
+
+	// 실패한 분석을 보관한 원본으로 다시 시작한다. 파일을 다시 올리지 않는다
+	@Transactional
+	public Map<String, Object> reprocess(UUID actor, UUID materialId, String keyValue) {
+		Row row = writable(actor, materialId);
+		var key = key(actor, "/v1/materials/" + materialId + "/reprocess", keyValue);
+		var stored = idempotency.findOrClaim(key, CanonicalJson.sha256("reprocess"));
+		if (stored.isPresent()) {
+			return read(stored.get().body());
+		}
+		if (!row.state().equals("failed")) {
+			throw new ApiException(ErrorCode.MATERIAL_STATE_CONFLICT);
+		}
+		jdbc.sql("UPDATE materials SET state = 'processing', version = version + 1 WHERE id = UUID_TO_BIN(?)")
+			.param(materialId.toString())
+			.update();
+		Map<String, Object> result = startAnalysis(actor, materialId);
+		idempotency.complete(key, true, 201, json.writeValueAsString(result), materialId);
+		return result;
+	}
+
+	// 분석 작업을 등록하고 등록 응답을 만든다. 프로젝트 잠금을 잡은 트랜잭션 안에서 호출한다
+	Map<String, Object> startAnalysis(UUID actor, UUID materialId) {
+		Row row = find(materialId, false);
+		ObjectNode input = json.createObjectNode();
+		input.put("materialId", materialId.toString());
+		input.putObject("inputVersions").put("materialVersion", row.version());
+		jobs.register(row.projectId(), actor, MaterialAnalysis.TYPE, "material", materialId, input);
+		event(row.projectId(), "material.updated", actor, materialId);
+		Map<String, Object> material = view(actor, materialId);
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("material", material);
+		result.put("job", material.get("job"));
+		return result;
+	}
+
+	// 분석 결과를 반영해 자료를 준비 완료로 바꾼다. 작업 완료 트랜잭션 안에서 호출한다
+	void markReady(UUID materialId) {
+		jdbc.sql("UPDATE materials SET state = 'ready', version = version + 1 WHERE id = UUID_TO_BIN(?)")
+			.param(materialId.toString())
+			.update();
+		event(find(materialId, false).projectId(), "material.updated", null, materialId);
+	}
+
+	// 분석이 실패하거나 취소로 끝났을 때 아직 처리 중인 자료를 실패로 바꾼다
+	void markFailed(UUID materialId) {
+		Row row = find(materialId, true);
+		if (row.deleted() || !row.state().equals("processing")) {
+			return;
+		}
+		jdbc.sql("UPDATE materials SET state = 'failed', version = version + 1 WHERE id = UUID_TO_BIN(?)")
+			.param(materialId.toString())
+			.update();
+		event(row.projectId(), "material.updated", null, materialId);
 	}
 
 	@Transactional(readOnly = true)
@@ -446,19 +532,21 @@ public class MaterialService {
 				       u.display_name AS creator_name, m.created_at, m.updated_at,
 				       BIN_TO_UUID(r.id) AS revision_id, r.revision_no, r.page_count, r.summary, r.excerpt, r.excerpt_page,
 				       BIN_TO_UUID(r.created_by) AS revision_by, ru.display_name AS revision_by_name,
-				       r.created_at AS revision_at
+				       r.created_at AS revision_at, f.mime_type, f.size_bytes, up.original_name
 				FROM materials m
 				JOIN users u ON u.id = m.created_by
 				LEFT JOIN material_revisions r ON r.id = m.current_revision_id
 				LEFT JOIN users ru ON ru.id = r.created_by
+				LEFT JOIN file_objects f ON f.id = m.source_file_id
+				LEFT JOIN uploads up ON up.file_object_id = f.id
 				WHERE m.id = UUID_TO_BIN(?)
 				""").param(materialId.toString()).query((rs, n) -> {
 			Map<String, Object> material = summary(rs);
 			material.put("description", rs.getString("description"));
 			Map<String, Object> origin = new LinkedHashMap<>();
-			origin.put("fileName", null);
-			origin.put("mimeType", null);
-			origin.put("sizeBytes", null);
+			origin.put("fileName", rs.getString("original_name"));
+			origin.put("mimeType", rs.getString("mime_type"));
+			origin.put("sizeBytes", rs.getObject("size_bytes"));
 			origin.put("url", rs.getString("source_url"));
 			material.put("source", origin);
 			Map<String, Object> revision = null;

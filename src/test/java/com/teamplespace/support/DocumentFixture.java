@@ -31,8 +31,9 @@ public class DocumentFixture {
 	}
 
 	public void reset() {
-		jdbc.sql("UPDATE materials SET current_revision_id = NULL").update();
-		for (String table : List.of("material_notes", "material_revisions", "materials", "job_attempts", "jobs", "project_invitations", "idempotency_records", "change_targets", "document_changes", "project_events",
+		jdbc.sql("UPDATE materials SET current_revision_id = NULL, source_file_id = NULL").update();
+		for (String table : List.of("material_notes", "material_chunks", "material_revisions", "materials", "uploads",
+				"file_objects", "job_attempts", "jobs", "project_invitations", "idempotency_records", "change_targets", "document_changes", "project_events",
 				"slide_elements", "slides", "presentations", "project_memberships", "projects")) {
 			jdbc.sql("DELETE FROM " + table).update();
 		}

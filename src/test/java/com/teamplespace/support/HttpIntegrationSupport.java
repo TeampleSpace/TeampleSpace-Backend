@@ -38,7 +38,9 @@ import tools.jackson.databind.ObjectMapper;
 		"teamplespace.auth.terms-version=http-test-v1",
 		"teamplespace.auth.terms-url=http://localhost:5174/legal/terms",
 		"teamplespace.auth.privacy-version=http-test-v1",
-		"teamplespace.auth.privacy-url=http://localhost:5174/legal/privacy" })
+		"teamplespace.auth.privacy-url=http://localhost:5174/legal/privacy",
+		// 내부 재시도를 기다리지 않고 바로 다시 선점한다
+		"teamplespace.jobs.retry-delay=0s" })
 public abstract class HttpIntegrationSupport {
 
 	@LocalServerPort

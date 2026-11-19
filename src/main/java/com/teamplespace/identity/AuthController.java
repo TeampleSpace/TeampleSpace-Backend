@@ -26,8 +26,9 @@ public class AuthController {
 	private final AuthService auth;
 	private final AuthSettings settings;
 	private final OAuthService oauth;
+	private final long pdfMaxBytes;
 
-	public AuthController(AuthService auth,AuthSettings settings,OAuthService oauth) { this.auth=auth;this.settings=settings;this.oauth=oauth; }
+	public AuthController(AuthService auth,AuthSettings settings,OAuthService oauth,@org.springframework.beans.factory.annotation.Value("${teamplespace.materials.pdf-max-bytes:20971520}") long pdfMaxBytes) { this.auth=auth;this.settings=settings;this.oauth=oauth;this.pdfMaxBytes=pdfMaxBytes; }
 
 	@GetMapping("/auth/bootstrap")
 	Map<String,Object> bootstrap(HttpServletRequest req,HttpServletResponse res) { return auth.bootstrap(req,res); }
@@ -35,8 +36,8 @@ public class AuthController {
 	@GetMapping("/capabilities")
 	Map<String,Object> capabilities() {
 		Map<String,Object> result=new LinkedHashMap<>();
-		result.put("configVersion","stage-1");result.put("policyRevision",settings.legalDocuments().isEmpty()?"unconfigured":settings.value("terms-version"));
-		result.put("uploadTypes",List.of());result.put("formats",List.of());result.put("fonts",List.of());
+		result.put("configVersion","stage-2");result.put("policyRevision",settings.legalDocuments().isEmpty()?"unconfigured":settings.value("terms-version"));
+		result.put("uploadTypes",List.of(Map.of("kind","material_pdf","mimeType","application/pdf","maxBytes",pdfMaxBytes)));result.put("formats",List.of());result.put("fonts",List.of());
 		result.put("featureFlags",Map.of("billing",false,"aiRevision",false,"restore",false,"accountLinking",false,"regeneration",false,"offlineDrafts",false));
 		result.put("legalDocuments",settings.legalDocuments());result.put("idempotencyRetentionSeconds",86400);
 		result.put("listLimit",Map.of("default",30,"max",100));
