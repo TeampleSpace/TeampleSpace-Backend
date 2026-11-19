@@ -55,6 +55,10 @@ class JobQueueTests {
 
 		final List<String> settled = new CopyOnWriteArrayList<>();
 
+		CountDownLatch started = new CountDownLatch(1);
+
+		CountDownLatch release = new CountDownLatch(1);
+
 		@Override
 		public String type() {
 			return TYPE;
@@ -66,6 +70,19 @@ class JobQueueTests {
 				case "retryable" -> throw new JobFailure("ANALYSIS_FAILED", "자료를 분석하지 못했어요.", true);
 				case "fatal" -> throw new JobFailure("MATERIAL_UNREADABLE", "파일을 읽을 수 없어요.", false);
 				case "crash" -> throw new IllegalStateException("예상하지 못한 오류");
+				case "blocked" -> {
+					started.countDown();
+					boolean waiting = true;
+					while (waiting) {
+						try {
+							release.await();
+							waiting = false;
+						}
+						catch (InterruptedException ignored) {
+							// 중단 신호에 응답하지 않는 처리기도 취소 상태가 되어야 한다
+						}
+					}
+				}
 				default -> {
 				}
 			}
@@ -127,6 +144,8 @@ class JobQueueTests {
 			.update();
 		handler.published.clear();
 		handler.settled.clear();
+		handler.started = new CountDownLatch(1);
+		handler.release = new CountDownLatch(1);
 	}
 
 	private UUID register(String mode) {
@@ -155,6 +174,49 @@ class JobQueueTests {
 			.params(id.toString(), attempt)
 			.query(String.class)
 			.single();
+	}
+
+	@Test
+	void workerConfirmsCancellationBeforeTheHandlerReturns() throws Exception {
+		UUID id = register("blocked");
+		JobWorker worker = new JobWorker(queue, 1);
+		try {
+			worker.poll();
+			assertThat(handler.started.await(5, TimeUnit.SECONDS)).isTrue();
+			queue.cancel(fixture.userA.userId(), id);
+			worker.heartbeat();
+			assertThat(status(id)).isEqualTo("canceled");
+			assertThat(attemptState(id, 1)).isEqualTo("canceled");
+			worker.heartbeat();
+			UUID next = register("ok");
+			handler.release.countDown();
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			while (!status(next).equals("succeeded") && System.nanoTime() < deadline) {
+				worker.poll();
+				Thread.sleep(10);
+			}
+			assertThat(status(next)).isEqualTo("succeeded");
+			assertThat(status(id)).isEqualTo("canceled");
+			assertThat(handler.published).noneMatch(value -> value.startsWith(id.toString()));
+			assertThat(handler.settled.stream().filter(value -> value.startsWith(id.toString())))
+				.containsExactly(id + ":canceled");
+		}
+		finally {
+			handler.release.countDown();
+			worker.stop();
+		}
+	}
+
+	@Test
+	void cancellationAcknowledgementRequiresACurrentCanceledClaim() {
+		UUID id = register("ok");
+		Claim claim = queue.claim("worker").orElseThrow();
+		assertThat(queue.acknowledgeCancellation(claim)).isFalse();
+		assertThat(status(id)).isEqualTo("running");
+		queue.cancel(fixture.userA.userId(), id);
+		assertThat(queue.acknowledgeCancellation(claim)).isTrue();
+		assertThat(queue.acknowledgeCancellation(claim)).isFalse();
+		assertThat(handler.settled).containsExactly(id + ":canceled");
 	}
 
 	@Test
