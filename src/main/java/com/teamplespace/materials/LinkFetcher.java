@@ -10,6 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.zip.GZIPInputStream;
@@ -43,6 +48,11 @@ public class LinkFetcher {
 	static final int MAX_REDIRECTS = 3;
 
 	static final int URL_MAX = 2048;
+
+	// 시스템 DNS가 인터럽트를 무시해도 분석 작업을 막지 않고 조회 수를 제한한다
+	private static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS,
+			new ArrayBlockingQueue<>(2), Thread.ofPlatform().daemon(true).name("link-dns-", 0).factory(),
+			new ThreadPoolExecutor.AbortPolicy());
 
 	private final BiPredicate<InetAddress, Integer> allowed;
 
@@ -90,7 +100,7 @@ public class LinkFetcher {
 		long deadline = System.nanoTime() + timeout.toNanos();
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
 			if (uri == null) throw blocked();
-			InetAddress[] pinned = resolve(uri);
+			InetAddress[] pinned = resolve(uri, deadline);
 			long remaining = deadline - System.nanoTime();
 			if (remaining <= 0) throw failed(true);
 			String host = uri.getHost();
@@ -143,6 +153,25 @@ public class LinkFetcher {
 	}
 
 	// 이름 풀이 결과를 검사한 뒤 그대로 연결에 넘긴다
+	private InetAddress[] resolve(URI uri, long deadline) {
+		if (deadline <= System.nanoTime()) throw failed(true);
+		java.util.concurrent.Future<InetAddress[]> task;
+		try { task = DNS.submit(() -> resolve(uri)); }
+		catch (RejectedExecutionException ex) { throw failed(true); }
+		try {
+			long remaining = deadline - System.nanoTime();
+			if (remaining <= 0) throw failed(true);
+			return task.get(remaining, TimeUnit.NANOSECONDS);
+		}
+		catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw failed(true); }
+		catch (TimeoutException ex) { throw failed(true); }
+		catch (ExecutionException ex) {
+			if (ex.getCause() instanceof JobFailure failure) throw failure;
+			throw failed(true);
+		}
+		finally { task.cancel(true); DNS.purge(); }
+	}
+
 	private InetAddress[] resolve(URI uri) {
 		int port = uri.getPort() != -1 ? uri.getPort() : uri.getScheme().equals("https") ? 443 : 80;
 		try {
@@ -230,7 +259,8 @@ public class LinkFetcher {
 					+ (uri.getPort() == -1 ? "" : ":" + uri.getPort()) + path
 					+ (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
 			// 한글 같은 글자는 퍼센트 표기로 바꿔 보낸다
-			return URI.create(new URI(rebuilt).toASCIIString());
+			String encoded = new URI(rebuilt).toASCIIString();
+			return encoded.length() <= URL_MAX ? URI.create(encoded) : null;
 		}
 		catch (java.net.URISyntaxException | IllegalArgumentException ex) {
 			return null;
