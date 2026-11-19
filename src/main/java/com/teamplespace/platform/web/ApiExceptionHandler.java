@@ -30,14 +30,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 		if (ex.retryAfterSeconds() != null) {
 			headers.set(HttpHeaders.RETRY_AFTER, ex.retryAfterSeconds().toString());
 		}
-		return response(ex.code(), HttpStatusCode.valueOf(ex.code().httpStatus()), headers, request);
+		return response(ex.code(), HttpStatusCode.valueOf(ex.code().httpStatus()), headers, request, ex.details());
 	}
 
 	// 예상하지 못한 오류는 로그에만 남기고 응답에는 내부 정보를 넣지 않는다
 	@ExceptionHandler(Exception.class)
 	ResponseEntity<Object> handleUnexpected(Exception ex, WebRequest request) {
 		log.error("처리하지 못한 오류", ex);
-		return response(ErrorCode.INTERNAL_ERROR, HttpStatusCode.valueOf(500), new HttpHeaders(), request);
+		return response(ErrorCode.INTERNAL_ERROR, HttpStatusCode.valueOf(500), new HttpHeaders(), request, Map.of());
 	}
 
 	// 잘못된 JSON, 허용하지 않는 메서드처럼 프레임워크가 거절한 요청이 모두 여기를 지난다
@@ -48,7 +48,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 		if (status.is5xxServerError() && status.value() != 503) {
 			log.error("프레임워크가 처리하지 못한 오류", ex);
 		}
-		return response(codeFor(status), status, headers, request);
+		return response(codeFor(status), status, headers, request, Map.of());
 	}
 
 	private static ErrorCode codeFor(HttpStatusCode status) {
@@ -65,11 +65,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 	}
 
 	private ResponseEntity<Object> response(ErrorCode code, HttpStatusCode status, HttpHeaders headers,
-			WebRequest request) {
+			WebRequest request, Map<String, Object> details) {
 		Map<String, Object> error = new LinkedHashMap<>();
 		error.put("code", code.name());
 		error.put("message", code.message());
 		error.put("retryable", code.retryable());
+		error.putAll(details);
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("error", error);
 		body.put("requestId",

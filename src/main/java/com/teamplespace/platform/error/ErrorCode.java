@@ -31,6 +31,8 @@ public enum ErrorCode {
 	INVITE_INVALID(404, false, "초대 링크를 확인해 주세요."),
 	INVITE_EXPIRED(410, false, "초대 링크가 만료됐어요."),
 	INVALID_CURSOR(422, false, "목록을 처음부터 다시 불러와 주세요."),
+	MATERIAL_DELETED(410, false, "삭제된 자료예요."),
+	MATERIAL_STATE_CONFLICT(409, false, "자료 상태를 다시 확인해 주세요."),
 	VERSION_CONFLICT(409, false, "이후 수정이 있어요."),
 	IDEMPOTENCY_KEY_REUSED(409, false, "같은 멱등키로 다른 요청을 보냈어요."),
 	REQUEST_IN_PROGRESS(409, true, "같은 요청을 처리하고 있어요."),
