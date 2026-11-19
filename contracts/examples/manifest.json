@@ -493,5 +493,35 @@
     "example": "invalid/design-mixed-mode.json",
     "schema": "stage-3-design.schema.json#/$defs/DesignSettingsPutRequest",
     "valid": false
+  },
+  {
+    "example": "outline-job-request.json",
+    "schema": "stage-3-generation.schema.json#/$defs/OutlineJobRequest",
+    "valid": true
+  },
+  {
+    "example": "outline-job-input.json",
+    "schema": "stage-3-generation.schema.json#/$defs/OutlineJobInput",
+    "valid": true
+  },
+  {
+    "example": "outline-job-result.json",
+    "schema": "stage-3-generation.schema.json#/$defs/OutlineJobResult",
+    "valid": true
+  },
+  {
+    "example": "presentation-generation-request.json",
+    "schema": "stage-3-generation.schema.json#/$defs/PresentationGenerationRequest",
+    "valid": true
+  },
+  {
+    "example": "presentation-generation-snapshot.json",
+    "schema": "stage-3-generation.schema.json#/$defs/PresentationGenerationSnapshot",
+    "valid": true
+  },
+  {
+    "example": "invalid/presentation-generation-unset-design.json",
+    "schema": "stage-3-generation.schema.json#/$defs/PresentationGenerationSnapshot",
+    "valid": false
   }
 ]
