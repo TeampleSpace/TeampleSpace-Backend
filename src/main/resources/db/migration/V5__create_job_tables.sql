@@ -1,0 +1,51 @@
+-- 작업 큐. 자료 분석부터 쓰고 이후 생성과 내보내기가 같은 테이블을 쓴다
+CREATE TABLE jobs (
+    id BINARY(16) NOT NULL,
+    project_id BINARY(16) NULL,
+    requester_id BINARY(16) NULL,
+    type VARCHAR(32) NOT NULL,
+    target_type VARCHAR(32) NOT NULL,
+    target_id BINARY(16) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'queued',
+    input_snapshot JSON NOT NULL,
+    input_hash BINARY(32) NOT NULL,
+    result_ref JSON NULL,
+    error JSON NULL,
+    progress INT UNSIGNED NOT NULL DEFAULT 0,
+    priority INT NOT NULL DEFAULT 0,
+    available_at DATETIME(6) NOT NULL,
+    attempt_no INT UNSIGNED NOT NULL DEFAULT 0,
+    max_attempts INT UNSIGNED NOT NULL DEFAULT 3,
+    lease_token BINARY(32) NULL,
+    lease_expires_at DATETIME(6) NULL,
+    cancel_requested_at DATETIME(6) NULL,
+    finished_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY jobs_ready_idx (status, available_at, priority, id),
+    KEY jobs_lease_idx (status, lease_expires_at, id),
+    KEY jobs_project_idx (project_id, created_at, id),
+    KEY jobs_target_idx (target_type, target_id, created_at),
+    CONSTRAINT jobs_project_fk FOREIGN KEY (project_id) REFERENCES projects (id),
+    CONSTRAINT jobs_requester_fk FOREIGN KEY (requester_id) REFERENCES users (id),
+    CONSTRAINT jobs_status_check CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'canceled')),
+    CONSTRAINT jobs_progress_check CHECK (progress <= 100)
+) ENGINE = InnoDB;
+
+-- 임대를 잡은 실행 한 번의 기록
+CREATE TABLE job_attempts (
+    job_id BINARY(16) NOT NULL,
+    attempt_no INT UNSIGNED NOT NULL,
+    worker_id VARCHAR(128) NOT NULL,
+    lease_token_hash BINARY(32) NOT NULL,
+    state VARCHAR(32) NOT NULL,
+    started_at DATETIME(6) NOT NULL,
+    heartbeat_at DATETIME(6) NOT NULL,
+    finished_at DATETIME(6) NULL,
+    error_code VARCHAR(64) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (job_id, attempt_no),
+    CONSTRAINT job_attempts_job_fk FOREIGN KEY (job_id) REFERENCES jobs (id),
+    CONSTRAINT job_attempts_state_check CHECK (state IN ('running', 'succeeded', 'failed', 'expired', 'canceled'))
+) ENGINE = InnoDB;

@@ -191,9 +191,9 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 기능 지원 정보 | `GET /v1/capabilities` | `Capabilities` | 제공자와 약관 설정을 반영한 HTTP 응답 구현 | 1단계 |
 | 세션 초기 정보 | `GET /v1/auth/bootstrap` | `AuthBootstrap` | 쿠키 기반 익명 및 인증 세션과 CSRF 토큰 발급 구현 | 1단계 |
 | 디자인 설정 조회 | `GET /v1/projects/{projectId}/design-settings` | `DesignSettings` | 형식만 | 3단계 |
-| 프로젝트 작업 목록 | `GET /v1/projects/{projectId}/jobs` | `JobList` | 형식만 | 2단계 |
-| 작업 조회 | `GET /v1/jobs/{jobId}` | `Job` | 형식만 | 2단계 |
-| 작업 취소 | `POST /v1/jobs/{jobId}/cancel` | `Job` | 형식만 | 2단계 |
+| 프로젝트 작업 목록 | `GET /v1/projects/{projectId}/jobs` | `JobList` | 필터와 커서 페이지, 프로젝트 권한 확인 구현 | 2단계 |
+| 작업 조회 | `GET /v1/jobs/{jobId}` | `Job` | 구현. 임대 선점과 내부 재시도, 시험이 있다 | 2단계 |
+| 작업 취소 | `POST /v1/jobs/{jobId}/cancel` | `Job` | 구현. 요청자와 소유자만 취소하고 완료와의 경합 시험이 있다 | 2단계 |
 | 자료 목록 | `GET /v1/projects/{projectId}/materials` | `MaterialList` | 형식만 | 2단계 |
 | 자료 상세 | `GET /v1/materials/{materialId}` | `Material` | 형식만 | 2단계 |
 | 자료 이름과 본문 변경 | `PATCH /v1/materials/{materialId}` | `MaterialPatchRequest`, `Material` | 형식만 | 2단계 |

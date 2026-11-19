@@ -31,7 +31,7 @@ public class DocumentFixture {
 	}
 
 	public void reset() {
-		for (String table : List.of("project_invitations", "idempotency_records", "change_targets", "document_changes", "project_events",
+		for (String table : List.of("job_attempts", "jobs", "project_invitations", "idempotency_records", "change_targets", "document_changes", "project_events",
 				"slide_elements", "slides", "presentations", "project_memberships", "projects")) {
 			jdbc.sql("DELETE FROM " + table).update();
 		}
