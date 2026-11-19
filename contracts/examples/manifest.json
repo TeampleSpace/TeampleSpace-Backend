@@ -388,5 +388,20 @@
     "example": "invalid/material-source-without-content.json",
     "schema": "stage-2.schema.json#/$defs/MaterialSource",
     "valid": false
+  },
+  {
+    "example": "invalid/material-ready-without-revision.json",
+    "schema": "stage-2.schema.json#/$defs/Material",
+    "valid": false
+  },
+  {
+    "example": "invalid/material-file-without-origin.json",
+    "schema": "stage-2.schema.json#/$defs/Material",
+    "valid": false
+  },
+  {
+    "example": "invalid/material-memo-with-job.json",
+    "schema": "stage-2.schema.json#/$defs/Material",
+    "valid": false
   }
 ]

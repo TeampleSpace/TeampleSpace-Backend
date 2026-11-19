@@ -98,8 +98,38 @@
       }
     },
     "Material": {
+      "description": "ready면 현재 개정이 있다. 파일과 링크 자료는 출처와 분석 작업을 갖고 마크다운 자료는 작업이 없다",
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "ready" } } },
+          "then": { "properties": { "currentRevision": { "type": "object" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "file" } } },
+          "then": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "fileName": { "type": "string" },
+                  "mimeType": { "type": "string" },
+                  "sizeBytes": { "type": "integer" }
+                }
+              },
+              "job": { "type": "object" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "link" } } },
+          "then": { "properties": { "source": { "properties": { "url": { "type": "string" } } }, "job": { "type": "object" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "memo" } } },
+          "then": { "properties": { "job": { "type": "null" } } }
+        }
+      ],
       "required": [
         "id", "projectId", "kind", "title", "description", "status", "version", "pageCount", "createdBy", "createdAt",
         "updatedAt", "source", "currentRevision", "job", "canDelete"
