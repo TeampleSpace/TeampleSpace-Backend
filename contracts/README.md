@@ -194,17 +194,17 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 프로젝트 작업 목록 | `GET /v1/projects/{projectId}/jobs` | `JobList` | 필터와 커서 페이지, 프로젝트 권한 확인 구현 | 2단계 |
 | 작업 조회 | `GET /v1/jobs/{jobId}` | `Job` | 구현. 임대 선점과 내부 재시도, 시험이 있다 | 2단계 |
 | 작업 취소 | `POST /v1/jobs/{jobId}/cancel` | `Job` | 구현. 요청자와 소유자만 취소하고 완료와의 경합 시험이 있다 | 2단계 |
-| 자료 목록 | `GET /v1/projects/{projectId}/materials` | `MaterialList` | 형식만 | 2단계 |
-| 자료 상세 | `GET /v1/materials/{materialId}` | `Material` | 형식만 | 2단계 |
-| 자료 이름과 본문 변경 | `PATCH /v1/materials/{materialId}` | `MaterialPatchRequest`, `Material` | 형식만 | 2단계 |
-| 자료 삭제 | `DELETE /v1/materials/{materialId}` | `MaterialDeleteRequest`, `MaterialDeleted` | 형식만 | 2단계 |
-| 마크다운 자료 등록 | `POST /v1/projects/{projectId}/materials/memo` | `MemoMaterialRequest`, `MaterialCreated` | 형식만 | 2단계 |
-| 팀 메모 조회 | `GET /v1/materials/{materialId}/note` | `MaterialNote` | 형식만 | 2단계 |
-| 팀 메모 저장 | `PUT /v1/materials/{materialId}/note` | `MaterialNotePutRequest`, `MaterialNoteSaveResponse` | 형식만 | 2단계 |
+| 자료 목록 | `GET /v1/projects/{projectId}/materials` | `MaterialList` | 검색, 필터, 유형별 개수, 커서 페이지 구현 | 2단계 |
+| 자료 상세 | `GET /v1/materials/{materialId}` | `Material` | 구현 | 2단계 |
+| 자료 이름과 본문 변경 | `PATCH /v1/materials/{materialId}` | `MaterialPatchRequest`, `Material` | 버전 비교 저장과 마크다운 개정 추가 구현 | 2단계 |
+| 자료 삭제 | `DELETE /v1/materials/{materialId}` | `MaterialDeleteRequest`, `MaterialDeleted` | 소유자와 작성자만 삭제, 개정 보존 구현 | 2단계 |
+| 마크다운 자료 등록 | `POST /v1/projects/{projectId}/materials/memo` | `MemoMaterialRequest`, `MaterialCreated` | 멱등 등록 구현 | 2단계 |
+| 팀 메모 조회 | `GET /v1/materials/{materialId}/note` | `MaterialNote` | 구현 | 2단계 |
+| 팀 메모 저장 | `PUT /v1/materials/{materialId}/note` | `MaterialNotePutRequest`, `MaterialNoteSaveResponse` | 버전 비교 저장 구현 | 2단계 |
 | 업로드 준비 | `POST /v1/projects/{projectId}/uploads` | `UploadRequest`, `UploadTicket` | 형식만 | 2단계 |
 | 파일 자료 등록 | `POST /v1/projects/{projectId}/materials/file` | `FileMaterialRequest`, `MaterialCreated` | 형식만 | 2단계 |
 | 분석 다시 시도 | `POST /v1/materials/{materialId}/reprocess` | `MaterialCreated` | 형식만 | 2단계 |
-| 원문 조회 | `GET /v1/materials/{materialId}/source` | `MaterialSource` | 형식만 | 2단계 |
+| 원문 조회 | `GET /v1/materials/{materialId}/source` | `MaterialSource` | 마크다운 자료만 구현. 파일과 링크는 형식만 | 2단계 |
 | 링크 자료 등록 | `POST /v1/projects/{projectId}/materials/link` | `LinkMaterialRequest`, `MaterialCreated` | 형식만 | 2단계 |
 
 단계 번호는 개발 순서의 번호다. 1은 인증과 프로젝트, 2는 자료, 3은 구성과 디자인, 4는 편집과 공유 저장, 5는 최초 생성, 6은 이력과 검토, 7은 발표와 내보내기다.
