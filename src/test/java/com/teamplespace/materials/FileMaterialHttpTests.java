@@ -22,6 +22,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.teamplespace.contracts.ContractSchemas;
 import com.teamplespace.processing.JobQueue;
@@ -42,6 +43,38 @@ class FileMaterialHttpTests extends HttpIntegrationSupport {
 
 	@Autowired
 	FileStorage storage;
+
+	@Autowired
+	UploadService uploads;
+
+	@Autowired
+	TransactionTemplate transaction;
+
+	@Test
+	void rolledBackRegistrationKeepsUploadAndRemovesUnreferencedCopyForRetry() throws Exception {
+		Browser owner = signup("등록 재시도");
+		String projectId = createProject(owner, "등록 롤백 " + UUID.randomUUID());
+		byte[] bytes = pdf(1);
+		JsonNode ticket = prepare(owner, projectId, bytes, "등록 재시도.pdf");
+		assertThat(put(owner, ticket, bytes)).isEqualTo(204);
+		UUID uploadId = UUID.fromString(ticket.get("uploadId").asString());
+		String key = UUID.randomUUID().toString();
+		transaction.executeWithoutResult(status -> {
+			uploads.createFile(UUID.fromString(owner.userId), UUID.fromString(projectId),
+					new UploadService.FileRequest(uploadId, null, null), key);
+			status.setRollbackOnly();
+		});
+		assertThat(storage.exists("staging/" + uploadId)).isTrue();
+		try (var files = Files.list(storage.path("files/" + projectId))) {
+			assertThat(files.toList()).isEmpty();
+		}
+		assertThat(count("SELECT COUNT(*) FROM file_objects WHERE project_id = UUID_TO_BIN(?)", projectId)).isZero();
+		JsonNode created = owner.request("POST", "/projects/" + projectId + "/materials/file",
+				Map.of("uploadId", uploadId.toString()), 201, key);
+		assertThat(created.get("material").get("status").asString()).isEqualTo("processing");
+		assertThat(storage.exists("staging/" + uploadId)).isFalse();
+		assertThat(count("SELECT COUNT(*) FROM file_objects WHERE project_id = UUID_TO_BIN(?)", projectId)).isEqualTo(1);
+	}
 
 	private void assertMatches(String schema, JsonNode value) {
 		assertThat(ContractSchemas.validate(schema, json.writeValueAsString(value))).as(value.toString()).isEmpty();

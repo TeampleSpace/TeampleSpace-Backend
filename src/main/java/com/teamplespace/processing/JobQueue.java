@@ -199,6 +199,18 @@ public class JobQueue {
 		return load(claim.job().id()).cancelRequested() ? Lease.CANCEL_REQUESTED : Lease.HELD;
 	}
 
+	// 처리기가 응답하지 않아도 취소 요청을 확정한다
+	public boolean acknowledgeCancellation(Claim claim) {
+		return Boolean.TRUE.equals(transaction.execute(status -> {
+			Locked locked = lockHeld(claim);
+			if (locked == null || !locked.job().cancelRequested()) {
+				return false;
+			}
+			close(locked, "canceled", null, null, null);
+			return true;
+		}));
+	}
+
 	// 선점한 작업 하나를 끝까지 처리한다
 	public void run(Claim claim) {
 		try {
