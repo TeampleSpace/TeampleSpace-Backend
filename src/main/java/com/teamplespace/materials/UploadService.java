@@ -21,6 +21,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
@@ -177,11 +179,17 @@ public class UploadService {
 			}
 			UUID fileId = UUID.randomUUID();
 			String finalKey = "files/" + projectId + "/" + fileId + ".pdf";
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCompletion(int completion) {
+					if (completion == STATUS_COMMITTED) storage.delete(upload.stagingKey());
+					else if (completion == STATUS_ROLLED_BACK) storage.delete(finalKey);
+				}
+			});
 			storage.promote(upload.stagingKey(), finalKey);
 			String reason = inspect(upload, finalKey);
 			if (reason != null) {
 				storage.delete(finalKey);
-				storage.delete(upload.stagingKey());
 				jdbc.sql("UPDATE uploads SET state = 'rejected' WHERE id = UUID_TO_BIN(?)")
 					.param(upload.id().toString())
 					.update();
@@ -200,7 +208,6 @@ public class UploadService {
 					UPDATE uploads SET state = 'consumed', consumed_at = UTC_TIMESTAMP(6), file_object_id = UUID_TO_BIN(?)
 					WHERE id = UUID_TO_BIN(?)
 					""").params(fileId.toString(), upload.id().toString()).update();
-			storage.delete(upload.stagingKey());
 			UUID materialId = materials.insert(projectId, actor, "file", title.isEmpty() ? upload.name() : title,
 					description.isEmpty() ? null : description, "processing", null);
 			jdbc.sql("UPDATE materials SET source_file_id = UUID_TO_BIN(?) WHERE id = UUID_TO_BIN(?)")

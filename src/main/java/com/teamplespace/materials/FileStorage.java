@@ -53,24 +53,28 @@ public class FileStorage {
 		try {
 			Files.createDirectories(target.getParent());
 			Path partial = Files.createTempFile(target.getParent(), "upload-", ".part");
-			long written = 0;
-			try (OutputStream output = Files.newOutputStream(partial)) {
-				byte[] buffer = new byte[64 * 1024];
-				int read;
-				while ((read = input.read(buffer)) != -1) {
-					written += read;
-					if (written > maxBytes) {
-						break;
+			try {
+				long written = 0;
+				try (OutputStream output = Files.newOutputStream(partial)) {
+					byte[] buffer = new byte[64 * 1024];
+					int read;
+					while ((read = input.read(buffer)) != -1) {
+						written += read;
+						if (written > maxBytes) {
+							break;
+						}
+						output.write(buffer, 0, read);
 					}
-					output.write(buffer, 0, read);
 				}
+				if (written > maxBytes) {
+					return -1;
+				}
+				Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+				return written;
 			}
-			if (written > maxBytes) {
+			finally {
 				Files.deleteIfExists(partial);
-				return -1;
 			}
-			Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-			return written;
 		}
 		catch (IOException ex) {
 			throw new UncheckedIOException(ex);
