@@ -38,6 +38,22 @@ Gradle은 저장소의 wrapper를 사용하므로 따로 설치하지 않는다.
 
    기동할 때 Flyway가 마이그레이션을 적용한다.
 
+## 홈 개발 서버 자동 배포
+
+GitHub Actions가 PR에서 MySQL 테스트와 컨테이너 기동을 검사한다. `main`에서는 CI가 보관한 JAR의 체크섬을 검증하고, API 응답과 업로드 경로를 확인한 이미지를 GHCR에 커밋 SHA와 `home-dev` 태그로 발행한다. 서버는 약 2분마다 `home-dev`를 조회하고 내려받은 다이제스트로 실행한다. 이미지 발행 결과는 Actions에서, 서버 반영 결과는 서버 저널에서 확인한다.
+
+최초 한 번 Ubuntu 서버에서 첫 이미지 발행 후 백엔드 저장소의 `main`을 받아 다음을 실행한다. 비공개 패키지는 먼저 `sudo docker login ghcr.io`에서 패키지를 읽을 수 있는 GitHub 계정과 `read:packages` 권한의 토큰으로 로그인한다.
+
+```bash
+sudo bash deploy/install.sh
+sudo journalctl -u teamplespace-backend-update.service -n 30 --no-pager
+curl -fsS http://127.0.0.1:18100/v1/capabilities
+```
+
+DB와 업로드 볼륨은 `teamplespace-backend-dev` 프로젝트에 유지한다. 이전 수동 배포의 볼륨을 이어 쓸 때는 설치 명령 뒤에 해당 배포의 `settings.env` 절대 경로를 붙인다. 서버 설정은 `/etc/teamplespace-backend/settings.env`에 보관하고, Vercel 출처와 공개 API 주소, SMTP 등 앱 설정은 같은 디렉터리의 권한 600인 `api.env`에 둔다. 공개 HTTPS 연결은 기존 Nginx에 별도로 설정한다.
+
+기동 실패 시 저널에서 실패한 단계를 확인한다. 자동 반영을 멈추려면 `sudo systemctl stop teamplespace-backend-update.timer`를 실행한다. 이전 버전으로 복구할 때는 DB 스키마 호환성을 확인하고 이전의 검증된 커밋 태그를 내려받아 `sudo /etc/teamplespace-backend/update.sh 이미지주소:커밋SHA`로 적용한다. 타이머를 다시 시작하면 다음 검사부터 `home-dev`를 따른다. 설치 파일이나 Compose 설정이 바뀐 릴리스는 서버의 최신 `main`에서 설치 명령을 다시 실행한다.
+
 ## 테스트
 
 ```bash
