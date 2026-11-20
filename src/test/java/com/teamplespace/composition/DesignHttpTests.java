@@ -35,7 +35,8 @@ class DesignHttpTests extends HttpIntegrationSupport {
 			keys.add(template.get("key").asString());
 		}
 		assertThat(keys).containsExactly("clean-report", "blue-focus", "editorial", "pitch-dark", "warm-story",
-				"grid-analysis", "bold-cover");
+				"grid-analysis", "bold-cover", "orange-pitch", "green-insight", "mono-editorial",
+				"lilac-studio", "data-briefing", "warm-seminar", "team-story");
 		assertThat(templates.get(0).get("name").asString()).isEqualTo("클린 리포트");
 		assertThat(catalog.get("allowedFonts").get(0).asString()).isEqualTo("Pretendard");
 
@@ -44,7 +45,7 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		assertThat(unset.get("version").asLong()).isEqualTo(1);
 		assertThat(unset.get("mode").asString()).isEqualTo("unset");
 		outsider.request("GET", path, null, 404);
-		Map<String, Object> template = template(1, templates.get(0));
+		Map<String, Object> template = template(1, templates.get(7));
 		String key = UUID.randomUUID().toString();
 		outsider.request("PUT", path, template, 404, key);
 		JsonNode saved = member.request("PUT", path, template, 200, key);

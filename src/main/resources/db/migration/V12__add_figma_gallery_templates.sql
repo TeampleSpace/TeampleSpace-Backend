@@ -1,0 +1,23 @@
+INSERT INTO templates (id, template_key, release_no, name, state, display_position, preview, fonts, layouts, schema_version)
+VALUES
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00008'), 'orange-pitch', 1, '오렌지 피치', 'published', 7,
+     JSON_OBJECT('backgroundColor', '#FFF0E3', 'headingColor', '#20242D', 'description', '주황색 강조 면과 큰 제목, 새로운 제안을 전달하는 구성'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00009'), 'green-insight', 1, '그린 인사이트', 'published', 8,
+     JSON_OBJECT('backgroundColor', '#E8EEE8', 'headingColor', '#234B3D', 'description', '차분한 녹색과 넓은 여백, 조사와 지속가능성 보고'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00010'), 'mono-editorial', 1, '모노 에디토리얼', 'published', 9,
+     JSON_OBJECT('backgroundColor', '#20242D', 'headingColor', '#FFFFFF', 'description', '짙은 배경과 흰 제목, 주황색 선으로 강조하는 세미나'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00011'), 'lilac-studio', 1, '라일락 스튜디오', 'published', 10,
+     JSON_OBJECT('backgroundColor', '#ECE7F7', 'headingColor', '#403156', 'description', '연보라 배경과 세로 강조선, 기획과 협업 아이디어 제안'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00012'), 'data-briefing', 1, '데이터 브리핑', 'published', 11,
+     JSON_OBJECT('backgroundColor', '#172C4D', 'headingColor', '#FFFFFF', 'description', '짙은 남색과 밝은 제목, 데이터와 관찰 결과 보고'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00013'), 'warm-seminar', 1, '웜 세미나', 'published', 12,
+     JSON_OBJECT('backgroundColor', '#FAF5E9', 'headingColor', '#624738', 'description', '따뜻한 종이색과 갈색 제목, 이야기를 나누는 세미나'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1),
+    (UUID_TO_BIN('ec85bac3-878f-4b5f-b4bc-5f0bc8c00014'), 'team-story', 1, '팀 스토리', 'published', 13,
+     JSON_OBJECT('backgroundColor', '#FFFFFF', 'headingColor', '#20242D', 'description', '흰 배경과 선명한 강조, 팀 아이디어와 수업 발표'),
+     JSON_ARRAY('Pretendard'), JSON_ARRAY('title', 'content', 'summary'), 1);
