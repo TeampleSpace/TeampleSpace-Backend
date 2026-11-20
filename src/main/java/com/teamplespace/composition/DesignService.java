@@ -31,7 +31,8 @@ public class DesignService {
 			JsonNode preview, JsonNode fonts, JsonNode layouts) {
 	}
 
-	public record Catalog(List<Template> items, List<String> allowedFonts, List<String> allowedLayouts) {
+	public record Catalog(List<Template> items, List<String> allowedFonts, List<String> allowedLayouts,
+			boolean projectFontsEnabled) {
 	}
 
 	public record Settings(long version, String mode, UUID templateId, Long templateVersion,
@@ -48,7 +49,7 @@ public class DesignService {
 	private static final List<String> LAYOUTS = List.of("title", "content", "summary");
 	private static final Set<String> TEMPLATE_FIELDS = Set.of("expectedVersion", "mode", "templateId", "templateVersion");
 	private static final Set<String> CUSTOM_FIELDS = Set.of("expectedVersion", "mode", "custom");
-	private static final Set<String> CUSTOM_PROPERTIES = Set.of("name", "font", "primaryColor", "guidelines");
+	private static final Set<String> CUSTOM_PROPERTIES = Set.of("name", "font", "fontAssetId", "primaryColor", "guidelines");
 	private static final Pattern HEX_COLOR = Pattern.compile("#[0-9a-fA-F]{6}");
 
 	private final JdbcClient jdbc;
@@ -56,14 +57,16 @@ public class DesignService {
 	private final ProjectAccess access;
 	private final IdempotencyStore idempotency;
 	private final ProjectEvents events;
+	private final ProjectFontService fonts;
 
 	public DesignService(JdbcClient jdbc, ObjectMapper json, ProjectAccess access,
-			IdempotencyStore idempotency, ProjectEvents events) {
+			IdempotencyStore idempotency, ProjectEvents events, ProjectFontService fonts) {
 		this.jdbc = jdbc;
 		this.json = json;
 		this.access = access;
 		this.idempotency = idempotency;
 		this.events = events;
+		this.fonts = fonts;
 	}
 
 	public Catalog catalog() {
@@ -75,7 +78,7 @@ public class DesignService {
 					rs.getLong("release_no"), rs.getString("name"), rs.getLong("schema_version"),
 					json.readTree(rs.getString("preview")), json.readTree(rs.getString("fonts")),
 					json.readTree(rs.getString("layouts")))).list();
-		return new Catalog(templates, FONTS, LAYOUTS);
+		return new Catalog(templates, FONTS, LAYOUTS, true);
 	}
 
 	@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -104,7 +107,7 @@ public class DesignService {
 		if (current.version() == OutlineInput.MAX_VERSION) {
 			throw new ApiException(ErrorCode.SERVICE_UNAVAILABLE);
 		}
-		Selection selection = selection(body);
+		Selection selection = selection(projectId, body);
 		long version = current.version() + 1;
 		var values = jdbc.sql("""
 				INSERT INTO design_settings (project_id, mode, template_id, custom, version, updated_by)
@@ -141,11 +144,11 @@ public class DesignService {
 				}).single();
 	}
 
-	private Selection selection(JsonNode body) {
+	private Selection selection(UUID projectId, JsonNode body) {
 		String mode = body.path("mode").asString("");
 		return switch (mode) {
 			case "template" -> template(body);
-			case "custom" -> custom(body);
+			case "custom" -> custom(projectId, body);
 			default -> throw invalid("mode", "템플릿 또는 직접 입력을 선택해 주세요.");
 		};
 	}
@@ -166,7 +169,7 @@ public class DesignService {
 		return new Selection("template", templateId, null);
 	}
 
-	private Selection custom(JsonNode body) {
+	private Selection custom(UUID projectId, JsonNode body) {
 		OutlineInput.checkFields(body, CUSTOM_FIELDS, "designSettings");
 		JsonNode source = body.path("custom");
 		OutlineInput.checkFields(source, CUSTOM_PROPERTIES, "custom");
@@ -183,8 +186,16 @@ public class DesignService {
 			throw invalid("custom.primaryColor", "대표 색상을 6자리 HEX로 입력해 주세요.");
 		}
 		String guidelines = source.has("guidelines") ? OutlineInput.text(source.get("guidelines"), "custom.guidelines", 2_000) : "";
-		return new Selection("custom", null, json.createObjectNode().put("name", name).put("font", font)
-				.put("primaryColor", color.toUpperCase(Locale.ROOT)).put("guidelines", guidelines));
+		var settings = json.createObjectNode().put("name", name).put("font", font)
+				.put("primaryColor", color.toUpperCase(Locale.ROOT)).put("guidelines", guidelines);
+		if (source.has("fontAssetId")) {
+			UUID fontId = OutlineInput.uuid(source.get("fontAssetId"), "custom.fontAssetId");
+			if (!fonts.contains(projectId, fontId)) {
+				throw invalid("custom.fontAssetId", "프로젝트에서 등록한 글꼴을 선택해 주세요.");
+			}
+			settings.put("fontAssetId", fontId.toString());
+		}
+		return new Selection("custom", null, settings);
 	}
 
 	private Result finish(IdempotencyStore.Key key, UUID projectId, int status, JsonNode body) {
