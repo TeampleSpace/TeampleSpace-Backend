@@ -231,9 +231,9 @@ class EventRecoveryTests {
 			.update();
 
 		assertThat(catchThrowableOfType(ApiException.class, () -> snapshots.read(userB, projectId)).code())
-			.isEqualTo(ErrorCode.FORBIDDEN);
+			.isEqualTo(ErrorCode.ACCESS_DENIED);
 		assertThat(catchThrowableOfType(ApiException.class, () -> events.after(userB, projectId, "0", 100)).code())
-			.isEqualTo(ErrorCode.FORBIDDEN);
+			.isEqualTo(ErrorCode.ACCESS_DENIED);
 	}
 
 	// 요소마다 하나의 편집 묶음으로 이어서 저장한다

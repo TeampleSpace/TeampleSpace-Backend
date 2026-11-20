@@ -80,7 +80,7 @@ public class ProjectEvents {
 	// 커서 다음 이벤트를 순번대로 돌려준다. 재연결할 때 마지막으로 받은 eventId를 커서로 쓴다
 	@Transactional(readOnly = true)
 	public Replay after(Actor actor, UUID projectId, String cursor, int limit) {
-		access.requireActiveMember(projectId, actor.userId());
+		access.requireMember(projectId, actor.userId());
 		long current = currentSeq(projectId);
 		Long oldest = jdbc.sql("SELECT MIN(seq) FROM project_events WHERE project_id = UUID_TO_BIN(:project)")
 			.param("project", projectId.toString())

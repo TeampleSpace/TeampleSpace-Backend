@@ -38,12 +38,15 @@ public class DocumentFixture {
 				"slide_elements", "slides", "presentations", "project_memberships", "projects")) {
 			jdbc.sql("DELETE FROM " + table).update();
 		}
-		jdbc.sql("INSERT INTO projects (id, name) VALUES (UUID_TO_BIN(?), '검증용 프로젝트')")
-			.param(projectId.toString())
-			.update();
 		for (Actor user : List.of(userA, userB)) {
 			jdbc.sql("INSERT INTO users(id,onboarding_status) VALUES(UUID_TO_BIN(?),'completed') ON DUPLICATE KEY UPDATE status='active'")
 				.param(user.userId().toString()).update();
+		}
+		// 소유자가 있어야 참여 확인을 통과한다
+		jdbc.sql("INSERT INTO projects (id, name, owner_user_id) VALUES (UUID_TO_BIN(?), '검증용 프로젝트', UUID_TO_BIN(?))")
+			.params(projectId.toString(), userA.userId().toString())
+			.update();
+		for (Actor user : List.of(userA, userB)) {
 			jdbc.sql("INSERT INTO project_memberships (project_id, user_id, state)"
 					+ " VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), 'active')")
 				.params(projectId.toString(), user.userId().toString())
