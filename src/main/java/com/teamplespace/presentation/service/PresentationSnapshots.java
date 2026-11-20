@@ -54,7 +54,7 @@ public class PresentationSnapshots {
 
 	public Snapshot read(Actor actor, UUID projectId) {
 		return consistentRead.execute(status -> {
-			access.requireActiveMember(projectId, actor.userId());
+			access.requireMember(projectId, actor.userId());
 			long cursor = events.currentSeq(projectId);
 			return new Snapshot(Long.toString(cursor), presentation(projectId));
 		});

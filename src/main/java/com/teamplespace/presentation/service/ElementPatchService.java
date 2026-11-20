@@ -22,7 +22,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 // 요소 수정 저장 경로. 문서 변경, 변경 이력, 이벤트, 멱등 결과를 한 트랜잭션으로 저장한다
-// 운영 인증이 생기기 전까지 사용자 문맥은 호출자가 넘기며 HTTP 경로로 노출하지 않는다
 @Service
 public class ElementPatchService {
 
@@ -82,7 +81,7 @@ public class ElementPatchService {
 			.optional()
 			.map(UUID::fromString)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-		access.requireActiveMember(projectId, actor.userId());
+		access.requireMember(projectId, actor.userId());
 
 		// 2. 버전 검사보다 먼저 같은 멱등키의 기존 결과를 찾는다
 		Optional<IdempotencyStore.Stored> stored = idempotency.findOrClaim(key, requestHash);
@@ -92,7 +91,7 @@ public class ElementPatchService {
 
 		// 3. 프로젝트, 문서, 대상 순서로 잠그고 권한을 다시 확인한다
 		access.lock(projectId);
-		access.requireActiveMember(projectId, actor.userId());
+		access.requireMember(projectId, actor.userId());
 		Current current = lockCurrent(elementId);
 
 		// 4. 시간이 지난 묶음을 먼저 닫는다. 브라우저가 닫는 요청을 보내지 못했어도 다음 쓰기에서 닫힌다

@@ -265,7 +265,7 @@ class ElementPatchServiceTests {
 			.update();
 
 		assertThat(errorOf(() -> patch(userA, elementA, "key-1", body(1, "mut-1", "첫 수정"))))
-			.isEqualTo(ErrorCode.FORBIDDEN);
+			.isEqualTo(ErrorCode.ACCESS_DENIED);
 	}
 
 	@Test
@@ -286,7 +286,7 @@ class ElementPatchServiceTests {
 		assertThat(errorOf(() -> patch(userA, elementA, " ", body(1, "mut-1", "첫 수정"))))
 			.isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
 		assertThat(errorOf(() -> patch(new Actor(UUID.randomUUID(), UUID.randomUUID()), elementA, "key-1", body(1, "mut-1", "첫 수정"))))
-			.isEqualTo(ErrorCode.FORBIDDEN);
+			.isEqualTo(ErrorCode.NOT_FOUND);
 		assertThat(errorOf(() -> patch(userA, UUID.randomUUID(), "key-1", body(1, "mut-1", "첫 수정"))))
 			.isEqualTo(ErrorCode.NOT_FOUND);
 		ObjectNode unknownField = body(1, "mut-1", "첫 수정");

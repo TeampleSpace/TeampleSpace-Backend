@@ -211,7 +211,7 @@ public class ChangeGroups {
 			.optional()
 			.map(UUID::fromString)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-		access.requireActiveMember(projectId, actor.userId());
+		access.requireMember(projectId, actor.userId());
 		access.lock(projectId);
 		closeExpiredInLock(projectId);
 		return jdbc.sql("""

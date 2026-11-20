@@ -18,19 +18,6 @@ public class ProjectAccess {
 		this.jdbc = jdbc;
 	}
 
-	public void requireActiveMember(UUID projectId, UUID userId) {
-		int active = jdbc
-			.sql("SELECT COUNT(*) FROM project_memberships m JOIN projects p ON p.id=m.project_id JOIN users u ON u.id=m.user_id WHERE u.status='active' AND p.status='active' AND project_id = UUID_TO_BIN(:project)"
-					+ " AND m.user_id = UUID_TO_BIN(:user) AND m.state = 'active'")
-			.param("project", projectId.toString())
-			.param("user", userId.toString())
-			.query(Integer.class)
-			.single();
-		if (active == 0) {
-			throw new ApiException(ErrorCode.FORBIDDEN);
-		}
-	}
-
 	// 참여한 적 없거나 없는 프로젝트는 찾을 수 없음으로, 나갔거나 제거된 팀원은 접근 거절로 알린다
 	public void requireMember(UUID projectId, UUID userId) {
 		String state = jdbc.sql("""
