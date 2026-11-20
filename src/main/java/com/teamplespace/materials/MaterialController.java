@@ -26,6 +26,7 @@ import com.teamplespace.materials.UploadService.FileRequest;
 import com.teamplespace.materials.UploadService.UploadRequest;
 
 import jakarta.servlet.http.HttpServletRequest;
+import tools.jackson.databind.JsonNode;
 
 // contracts/stage-2.md의 자료와 팀 메모 경로
 @RestController
@@ -36,11 +37,14 @@ public class MaterialController {
 
 	private final UploadService uploads;
 
+	private final MaterialSummary summaries;
+
 	private final AuthService auth;
 
-	public MaterialController(MaterialService materials, UploadService uploads, AuthService auth) {
+	public MaterialController(MaterialService materials, UploadService uploads, MaterialSummary summaries, AuthService auth) {
 		this.materials = materials;
 		this.uploads = uploads;
+		this.summaries = summaries;
 		this.auth = auth;
 	}
 
@@ -66,6 +70,12 @@ public class MaterialController {
 	ResponseEntity<?> reprocess(@PathVariable UUID materialId,
 			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
 		return ResponseEntity.status(201).body(materials.reprocess(actor(request), materialId, key));
+	}
+
+	@PostMapping("/materials/{materialId}/summary-jobs")
+	ResponseEntity<JsonNode> summarize(@PathVariable UUID materialId, @RequestBody JsonNode input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.accepted().body(summaries.create(actor(request), materialId, key, input));
 	}
 
 	@GetMapping("/projects/{projectId}/materials")

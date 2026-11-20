@@ -249,6 +249,7 @@ public class MaterialService {
 			// 본문이 그대로면 개정을 만들지 않는다
 			if (!markdown.equals(current)) {
 				addMemoRevision(row, actor, markdown);
+				jobs.cancelActive(MaterialSummary.TYPE, row.currentRevisionId(), actor);
 			}
 		}
 		jdbc.sql("UPDATE materials SET version = version + 1 WHERE id = UUID_TO_BIN(?)")
@@ -271,6 +272,9 @@ public class MaterialService {
 				WHERE id = UUID_TO_BIN(?)
 				""").param(materialId.toString()).update();
 		jobs.cancelActive("material", materialId, actor);
+		if (row.currentRevisionId() != null) {
+			jobs.cancelActive(MaterialSummary.TYPE, row.currentRevisionId(), actor);
+		}
 		long eventId = event(row.projectId(), "material.deleted", actor, materialId);
 		Map<String, Object> tombstone = new LinkedHashMap<>();
 		tombstone.put("resourceType", "material");
@@ -600,6 +604,12 @@ public class MaterialService {
 			}
 			material.put("currentRevision", revision);
 			material.put("job", jobs.latest("material", materialId));
+			if (revision != null && "ready".equals(rs.getString("state"))) {
+				Map<String, Object> summaryJob = jobs.latest(MaterialSummary.TYPE, UUID.fromString(rs.getString("revision_id")));
+				if (summaryJob != null) {
+					material.put("summaryJob", summaryJob);
+				}
+			}
 			material.put("canDelete", actor.toString().equals(rs.getString("created_by"))
 					|| access.isOwner(UUID.fromString(rs.getString("project_id")), actor));
 			return material;
