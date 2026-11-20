@@ -2,6 +2,7 @@ package com.teamplespace.composition;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +11,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 
 import com.teamplespace.contracts.ContractSchemas;
 import com.teamplespace.support.HttpIntegrationSupport;
@@ -18,6 +26,48 @@ import com.teamplespace.support.HttpIntegrationSupport;
 import tools.jackson.databind.JsonNode;
 
 class DesignHttpTests extends HttpIntegrationSupport {
+
+	@Autowired
+	DataSource dataSource;
+
+	@Test
+	void galleryMigrationPreservesExistingTemplateSelection() throws SQLException {
+		try (var connection = dataSource.getConnection()) {
+			var session = JdbcClient.create(new SingleConnectionDataSource(connection, true));
+			try {
+				// 임시 테이블에 이전 카탈로그와 저장된 디자인을 준비한다
+				session.sql("CREATE TEMPORARY TABLE upgrade_templates LIKE templates").update();
+				session.sql("INSERT INTO upgrade_templates SELECT * FROM templates WHERE display_position < 7").update();
+				session.sql("CREATE TEMPORARY TABLE upgrade_design_settings LIKE design_settings").update();
+				session.sql("CREATE TEMPORARY TABLE templates LIKE upgrade_templates").update();
+				session.sql("CREATE TEMPORARY TABLE design_settings LIKE upgrade_design_settings").update();
+				session.sql("INSERT INTO templates SELECT * FROM upgrade_templates").update();
+				session.sql("""
+					INSERT INTO design_settings (project_id, mode, template_id, version, updated_by)
+					SELECT UUID_TO_BIN(UUID()), 'template', id, 4, UUID_TO_BIN(UUID())
+					FROM templates WHERE template_key = 'blue-focus' AND release_no = 1
+					""").update();
+				String savedSelection = """
+					SELECT BIN_TO_UUID(template_id) AS template_id, template_key, release_no, version
+					FROM design_settings JOIN templates ON design_settings.template_id = templates.id
+					""";
+				var before = session.sql(savedSelection).query().singleRow();
+				assertThat(session.sql("SELECT COUNT(*) FROM templates").query(Integer.class).single()).isEqualTo(7);
+
+				ScriptUtils.executeSqlScript(connection,
+						new ClassPathResource("db/migration/V12__add_figma_gallery_templates.sql"));
+
+				assertThat(session.sql(savedSelection).query().singleRow()).isEqualTo(before);
+				assertThat(session.sql("SELECT template_key FROM templates ORDER BY display_position")
+						.query(String.class).list()).containsExactly("clean-report", "blue-focus", "editorial",
+							"pitch-dark", "warm-story", "grid-analysis", "bold-cover", "orange-pitch", "green-insight",
+							"mono-editorial", "lilac-studio", "data-briefing", "warm-seminar", "team-story");
+			} finally {
+				session.sql("DROP TEMPORARY TABLE IF EXISTS templates, design_settings, upgrade_templates, upgrade_design_settings")
+					.update();
+			}
+		}
+	}
 
 	@Test
 	void catalogAndBothModesAreValidatedAndRemembered() throws Exception {
