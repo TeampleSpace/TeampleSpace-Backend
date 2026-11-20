@@ -93,6 +93,8 @@ public class ElementPatchService {
 		access.lock(projectId);
 		access.requireMember(projectId, actor.userId());
 		Current current = lockCurrent(elementId);
+		// 요소 종류에 맞지 않는 내용과 스타일은 버전 검사보다 먼저 거절한다
+		ElementRules.check(current.type(), request.content(), request.style(), json.readTree(current.content()));
 
 		// 4. 시간이 지난 묶음을 먼저 닫는다. 브라우저가 닫는 요청을 보내지 못했어도 다음 쓰기에서 닫힌다
 		groups.closeExpiredInLock(projectId);
