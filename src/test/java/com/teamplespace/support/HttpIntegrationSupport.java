@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -130,6 +131,14 @@ public abstract class HttpIntegrationSupport {
 			builder.method(method,
 					body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));
 			return client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+		}
+
+		// 끝나지 않는 응답을 줄 단위로 읽는다. 이벤트 구독에 쓰고 다 읽으면 본문을 닫는다
+		public HttpResponse<Stream<String>> lines(String path, Map<String, String> headers) throws Exception {
+			var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/v1" + path))
+				.timeout(Duration.ofSeconds(15));
+			headers.forEach(builder::header);
+			return client.send(builder.GET().build(), HttpResponse.BodyHandlers.ofLines());
 		}
 
 		public JsonNode bootstrap() throws Exception {
