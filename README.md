@@ -40,19 +40,40 @@ Gradle은 저장소의 wrapper를 사용하므로 따로 설치하지 않는다.
 
 ## 홈 개발 서버 자동 배포
 
-GitHub Actions가 PR에서 MySQL 테스트와 컨테이너 기동을 검사한다. `main`에서는 CI가 보관한 JAR의 체크섬을 검증하고, API 응답과 업로드 경로를 확인한 이미지를 GHCR에 커밋 SHA와 `home-dev` 태그로 발행한다. 서버는 약 2분마다 `home-dev`를 조회하고 내려받은 다이제스트로 실행한다. 이미지 발행 결과는 Actions에서, 서버 반영 결과는 서버 저널에서 확인한다.
+GitHub Actions가 PR에서 MySQL 테스트와 컨테이너 기동을 검사한다. `main`에서는 CI가 보관한 JAR의 체크섬을 검증하고, API 응답과 업로드 경로를 확인한 이미지를 GHCR에 커밋 SHA 태그로 발행한다. 발행이 끝나면 배포 작업이 SSH로 서버의 `deploy/ssh-deploy.sh`를 실행한다. 서버는 그 실행의 일회용 토큰으로 이미지를 받고 같은 커밋의 Compose 설정으로 교체한 뒤 API 응답을 확인한다. 패키지는 비공개로 두어도 된다. 결과는 Actions의 배포 작업 로그에서 확인한다.
 
-최초 한 번 Ubuntu 서버에서 첫 이미지 발행 후 백엔드 저장소의 `main`을 받아 다음을 실행한다. 비공개 패키지는 먼저 `sudo docker login ghcr.io`에서 패키지를 읽을 수 있는 GitHub 계정과 `read:packages` 권한의 토큰으로 로그인한다.
+서버에는 Docker와 Compose, Git이 필요하다. 최초 한 번 배포 계정으로 저장소를 받고 설정 파일을 만든다. DB 볼륨 `teamplespace-backend-dev_dbdata`가 이미 있는 서버는 비밀번호가 볼륨에 남아 있으므로 설정 파일을 새로 만들지 않고 기존 `settings.env`와 `api.env`를 `deploy/`에 권한 600으로 옮긴다.
 
 ```bash
-sudo bash deploy/install.sh
-sudo journalctl -u teamplespace-backend-update.service -n 30 --no-pager
-curl -fsS http://127.0.0.1:18100/v1/capabilities
+git clone --depth 1 https://github.com/TeampleSpace/TeampleSpace-Backend.git ~/apps/teamplespace-backend
+cd ~/apps/teamplespace-backend/deploy
+(umask 077; for key in DB_PASSWORD DB_ROOT_PASSWORD AUTH_SECRET; do echo "$key=$(openssl rand -hex 32)"; done > settings.env)
 ```
 
-DB와 업로드 볼륨은 `teamplespace-backend-dev` 프로젝트에 유지한다. 이전 수동 배포의 볼륨을 이어 쓸 때는 설치 명령 뒤에 해당 배포의 `settings.env` 절대 경로를 붙인다. 서버 설정은 `/etc/teamplespace-backend/settings.env`에 보관하고, Vercel 출처와 공개 API 주소, SMTP 등 앱 설정은 같은 디렉터리의 권한 600인 `api.env`에 둔다. 공개 HTTPS 연결은 기존 Nginx에 별도로 설정한다.
+타이머 방식으로 설치했던 서버는 전환 전에 이전 구성을 제거한다. 남겨 두면 타이머가 예전 이미지를 다시 적용한다. 기존 설정 파일을 옮긴 뒤에 `/etc/teamplespace-backend`를 지운다.
 
-기동 실패 시 저널에서 실패한 단계를 확인한다. 자동 반영을 멈추려면 `sudo systemctl stop teamplespace-backend-update.timer`를 실행한다. 이전 버전으로 복구할 때는 DB 스키마 호환성을 확인하고 이전의 검증된 커밋 태그를 내려받아 `sudo /etc/teamplespace-backend/update.sh 이미지주소:커밋SHA`로 적용한다. 타이머를 다시 시작하면 다음 검사부터 `home-dev`를 따른다. 설치 파일이나 Compose 설정이 바뀐 릴리스는 서버의 최신 `main`에서 설치 명령을 다시 실행한다.
+```bash
+sudo systemctl disable --now teamplespace-backend-update.timer
+sudo systemctl stop teamplespace-backend-update.service
+sudo rm -f /etc/systemd/system/teamplespace-backend-update.service /etc/systemd/system/teamplespace-backend-update.timer
+sudo systemctl daemon-reload
+```
+
+배포 전용 SSH 키를 만들고 공개 키를 서버의 `~/.ssh/authorized_keys`에 배포 명령만 실행하도록 등록한다.
+
+```text
+restrict,command="bash /home/계정/apps/teamplespace-backend/deploy/ssh-deploy.sh" ssh-ed25519 공개키
+```
+
+GitHub에는 `main`만 배포할 수 있는 `home-dev` 환경을 만들고 시크릿 `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`와 변수 `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`를 둔다.
+
+DB와 업로드 볼륨은 `teamplespace-backend-dev` 프로젝트에 유지한다. Vercel 출처와 공개 API 주소, SMTP 등 앱 설정은 `deploy/api.env`에 권한 600으로 둔다. 두 설정 파일은 Git이 추적하지 않는다. 공개 HTTPS 연결은 기존 Nginx에 별도로 설정한다.
+
+배포가 실패하면 Actions 로그에서 실패한 단계를 확인하고 배포 작업을 다시 실행한다. `api.env`를 바꾸거나 이전 버전으로 복구할 때는 서버에서 적용할 커밋의 이미지를 지정한다. 복구 전에는 DB 스키마 호환성을 확인한다.
+
+```bash
+bash ~/apps/teamplespace-backend/deploy/update.sh ghcr.io/teamplespace/teamplespace-backend:커밋SHA
+```
 
 ## 테스트
 
