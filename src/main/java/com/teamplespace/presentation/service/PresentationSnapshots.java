@@ -13,8 +13,10 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.teamplespace.collaboration.service.ProjectEvents;
+import com.teamplespace.composition.service.DesignService;
 import com.teamplespace.platform.security.Actor;
 import com.teamplespace.presentation.service.ElementPatchRequest.Geometry;
+import com.teamplespace.processing.service.JobQueue;
 import com.teamplespace.workspace.service.ProjectAccess;
 
 import tools.jackson.databind.JsonNode;
@@ -22,8 +24,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-// 문서와 이벤트 커서를 같은 DB 시점에서 읽는다
-// 팀원, 디자인, 작업, 자료 요약은 해당 기능을 만들 때 동기화 스냅샷에 더한다
+// 문서와 이벤트 커서, 편집 화면에 필요한 요약을 같은 DB 시점에서 읽는다
 @Component
 public class PresentationSnapshots {
 
@@ -38,14 +39,20 @@ public class PresentationSnapshots {
 
 	private final ProjectEvents events;
 
+	private final DesignService designs;
+
+	private final JobQueue jobs;
+
 	private final TransactionTemplate consistentRead;
 
 	public PresentationSnapshots(JdbcClient jdbc, ObjectMapper json, ProjectAccess access, ProjectEvents events,
-			PlatformTransactionManager transactionManager) {
+			DesignService designs, JobQueue jobs, PlatformTransactionManager transactionManager) {
 		this.jdbc = jdbc;
 		this.json = json;
 		this.access = access;
 		this.events = events;
+		this.designs = designs;
+		this.jobs = jobs;
 		// 첫 조회 시점의 스냅샷으로 커서와 문서를 함께 읽는다
 		this.consistentRead = new TransactionTemplate(transactionManager);
 		this.consistentRead.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
@@ -57,6 +64,41 @@ public class PresentationSnapshots {
 			access.requireMember(projectId, actor.userId());
 			long cursor = events.currentSeq(projectId);
 			return new Snapshot(Long.toString(cursor), presentation(projectId));
+		});
+	}
+
+	// contracts/schemas/api.schema.json의 EditorSnapshot
+	public JsonNode editor(Actor actor, UUID projectId) {
+		return consistentRead.execute(status -> {
+			access.requireMember(projectId, actor.userId());
+			ObjectNode snapshot = json.createObjectNode();
+			snapshot.put("scope", "editor");
+			snapshot.put("projectId", projectId.toString());
+			snapshot.put("eventCursor", Long.toString(events.currentSeq(projectId)));
+			JsonNode presentation = presentation(projectId);
+			snapshot.set("presentation", presentation != null ? presentation : json.nullNode());
+			ArrayNode members = snapshot.putArray("members");
+			jdbc.sql("""
+					SELECT BIN_TO_UUID(m.user_id) AS user_id, COALESCE(u.display_name, '') AS display_name,
+					       p.owner_user_id = m.user_id AS is_owner, m.version
+					FROM project_memberships m
+					JOIN users u ON u.id = m.user_id
+					JOIN projects p ON p.id = m.project_id
+					WHERE m.project_id = UUID_TO_BIN(:project) AND m.state = 'active' AND u.status = 'active'
+					ORDER BY m.joined_at, m.user_id
+					""").param("project", projectId.toString()).query(rs -> {
+				ObjectNode member = members.addObject();
+				member.put("userId", rs.getString("user_id"));
+				member.put("displayName", rs.getString("display_name"));
+				member.put("isOwner", rs.getBoolean("is_owner"));
+				member.put("membershipVersion", rs.getLong("version"));
+			});
+			snapshot.set("designSettings", json.valueToTree(designs.get(actor.userId(), projectId)));
+			snapshot.set("activeJobs", json.valueToTree(
+					jobs.list(actor.userId(), projectId, null, "queued,running", null, null, null, 100).get("items")));
+			// 요소가 자료를 참조하는 기능이 생기기 전이라 비어 있다
+			snapshot.putArray("materials");
+			return (JsonNode) snapshot;
 		});
 	}
 
