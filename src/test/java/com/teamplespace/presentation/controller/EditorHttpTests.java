@@ -84,6 +84,34 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		assertThat(reread.get("content").get("text").asString()).isEqualTo("새 제목");
 
 		owner.request("PATCH", path(title), body, 400, null);
+
+		// 요소 종류에 맞지 않는 내용과 스타일은 저장하지 않는다
+		JsonNode current = sampleElement(owner, project, 0, 1);
+		for (JsonNode patch : List.of(json.readTree("{\"content\":{}}"),
+				json.readTree("{\"content\":{\"text\":1}}"),
+				json.readTree("{\"content\":{\"text\":\"글\",\"shape\":\"rect\"}}"),
+				json.readTree("{\"style\":{\"fontFamily\":\"Pretendard\"}}"),
+				json.readTree("{\"style\":{\"fontFamily\":\"Pretendard\",\"fontSize\":20,\"fontWeight\":450,"
+						+ "\"color\":\"red\",\"align\":\"left\",\"lineHeight\":1.2}}"))) {
+			ObjectNode invalid = textPatch(current, "무시");
+			invalid.set("patch", patch);
+			owner.request("PATCH", path(current), invalid, 422, UUID.randomUUID().toString());
+		}
+		JsonNode shape = sampleElement(owner, project, 0, 0);
+		ObjectNode wrongShape = textPatch(shape, "무시");
+		owner.request("PATCH", path(shape), wrongShape, 422, UUID.randomUUID().toString());
+		assertThat(sampleElement(owner, project, 0, 1)).isEqualTo(current);
+		assertThat(sampleElement(owner, project, 0, 0)).isEqualTo(shape);
+
+		// 맞는 스타일은 통째로 바꿔 저장한다
+		ObjectNode styled = textPatch(current, "무시");
+		styled.set("patch", json.readTree("{\"style\":{\"fontFamily\":\"Pretendard\",\"fontSize\":60,"
+				+ "\"fontWeight\":700,\"color\":\"#FFFFFF\",\"align\":\"center\",\"lineHeight\":1.2}}"));
+		owner.request("PATCH", path(current), styled, 200, UUID.randomUUID().toString());
+		JsonNode restyled = sampleElement(owner, project, 0, 1);
+		assertThat(restyled.get("style").get("align").asString()).isEqualTo("center");
+		assertThat(restyled.get("content")).isEqualTo(current.get("content"));
+		assertThat(ContractSchemas.validate("document.schema.json#/$defs/Element", restyled.toString())).isEmpty();
 		owner.request("PATCH", path(title), Map.of("generation", 1), 422, UUID.randomUUID().toString());
 	}
 
