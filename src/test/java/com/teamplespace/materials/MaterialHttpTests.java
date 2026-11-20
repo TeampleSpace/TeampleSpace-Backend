@@ -82,6 +82,19 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void disabledSummaryDoesNotCreateAJobOrChangeTheMaterial() throws Exception {
+		Browser owner = signup("요약 비활성 확인");
+		String projectId = createProject(owner, "요약 비활성 확인");
+		JsonNode material = memo(owner, projectId, "제목", "본문");
+		String path = "/materials/" + material.path("id").asString();
+		String revision = material.path("currentRevision").path("id").asString();
+		assertThat(owner.get("/capabilities").path("featureFlags").path("materialSummary").asBoolean()).isFalse();
+		assertThat(owner.post(path + "/summary-jobs", Map.of("expectedRevisionId", revision), 503)
+			.path("error").path("code").asString()).isEqualTo("SERVICE_UNAVAILABLE");
+		assertThat(owner.get(path)).isEqualTo(material);
+	}
+
+	@Test
 	void invalidMemoInputIsRejectedWithFieldErrors() throws Exception {
 		Browser owner = signup("입력 검증");
 		String projectId = createProject(owner, "입력 검증 " + UUID.randomUUID());
