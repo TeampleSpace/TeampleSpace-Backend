@@ -2,6 +2,7 @@ package com.teamplespace.composition;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,8 +29,14 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		String path = "/projects/" + project + "/design-settings";
 		JsonNode catalog = owner.get("/templates");
 		assertSchema("stage-3-design.schema.json#/$defs/TemplateCatalog", catalog);
-		assertThat(catalog.get("items").size()).isEqualTo(2);
-		assertThat(catalog.get("items").get(0).get("name").asString()).isEqualTo("클린 리포트");
+		JsonNode templates = catalog.get("items");
+		var keys = new ArrayList<String>();
+		for (JsonNode template : templates) {
+			keys.add(template.get("key").asString());
+		}
+		assertThat(keys).containsExactly("clean-report", "blue-focus", "editorial", "pitch-dark", "warm-story",
+				"grid-analysis", "bold-cover");
+		assertThat(templates.get(0).get("name").asString()).isEqualTo("클린 리포트");
 		assertThat(catalog.get("allowedFonts").get(0).asString()).isEqualTo("Pretendard");
 
 		JsonNode unset = member.get(path);
@@ -37,7 +44,7 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		assertThat(unset.get("version").asLong()).isEqualTo(1);
 		assertThat(unset.get("mode").asString()).isEqualTo("unset");
 		outsider.request("GET", path, null, 404);
-		Map<String, Object> template = template(1, catalog.get("items").get(0));
+		Map<String, Object> template = template(1, templates.get(0));
 		String key = UUID.randomUUID().toString();
 		outsider.request("PUT", path, template, 404, key);
 		JsonNode saved = member.request("PUT", path, template, 200, key);
@@ -67,6 +74,10 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		member.request("GET", path, null, 403);
 		member.request("PUT", path, template, 403, key);
 		assertThat(owner.get(path)).isEqualTo(custom);
+		JsonNode newTemplate = templates.get(3);
+		JsonNode selected = owner.request("PUT", path, template(3, newTemplate), 200, UUID.randomUUID().toString());
+		assertThat(selected.get("templateId").asString()).isEqualTo(newTemplate.get("id").asString());
+		assertThat(owner.get(path)).isEqualTo(selected);
 	}
 
 	@Test
