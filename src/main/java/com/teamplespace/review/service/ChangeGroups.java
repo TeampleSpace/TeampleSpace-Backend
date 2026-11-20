@@ -93,6 +93,25 @@ public class ChangeGroups {
 				""", authorId, null, elementId);
 	}
 
+	// 지워지는 요소를 고치던 묶음을 닫는다. 요소를 주지 않으면 그 슬라이드의 모든 요소가 대상이다
+	public void closeForDeletedInLock(UUID projectId, UUID slideId, UUID elementId) {
+		LocalDateTime now = LocalDateTime.now(clock);
+		jdbc.sql("""
+				SELECT BIN_TO_UUID(c.id) FROM document_changes c
+				WHERE c.project_id = UUID_TO_BIN(:project) AND c.group_state = 'open'
+				  AND EXISTS (SELECT 1 FROM change_targets t WHERE t.change_id = c.id
+				              AND t.slide_id = UUID_TO_BIN(:slide)
+				              AND (:element IS NULL OR t.element_id = UUID_TO_BIN(:element)))
+				ORDER BY c.opened_at, c.id
+				""")
+			.param("project", projectId.toString())
+			.param("slide", slideId.toString())
+			.param("element", elementId == null ? null : elementId.toString())
+			.query(String.class)
+			.list()
+			.forEach(id -> closeInLock(projectId, UUID.fromString(id), now, null));
+	}
+
 	// 같은 편집 세션이 다른 요소로 옮겨 가면 이전 묶음을 닫는다
 	public void closeOtherTargetsInLock(UUID projectId, Actor actor, UUID elementId) {
 		closeMatchingInLock(projectId, """
