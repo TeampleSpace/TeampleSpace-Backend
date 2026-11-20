@@ -22,7 +22,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.teamplespace.identity.ChallengeMail;
+import com.teamplespace.identity.service.ChallengeMail;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
