@@ -1,0 +1,10 @@
+[Unit]
+Description=Update TeampleSpace backend containers
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/teamplespace-backend/update.sh
+TimeoutStartSec=15min

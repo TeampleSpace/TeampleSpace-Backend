@@ -6,6 +6,7 @@ out/
 .vscode/
 .DS_Store
 .env
+deploy/*.env
 data/
 
 # Project documents are managed outside this repository
