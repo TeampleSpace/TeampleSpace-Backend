@@ -13,7 +13,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.security.Actor;
 import com.teamplespace.workspace.service.ProjectAccess;
 
@@ -118,19 +117,25 @@ public class EventStreams {
 					idlePolls = 0;
 				}
 			}
-			catch (ApiException ex) {
-				// 권한을 잃었거나 프로젝트가 사라졌다. 다시 연결하면 오류 응답을 받는다
-				close();
-			}
-			catch (IOException | RuntimeException ex) {
-				// 클라이언트가 떠났거나 보낼 수 없는 상태다
+			catch (IOException ex) {
+				// 클라이언트가 떠났다
 				cancel();
+			}
+			catch (RuntimeException ex) {
+				// 권한을 잃었거나 조회에 실패했다. 연결을 끝내 클라이언트가 다시 구독하게 한다
+				// 권한이 없으면 다시 연결할 때 오류 응답을 받는다
+				close();
 			}
 		}
 
 		private void close() {
 			cancel();
-			emitter.complete();
+			try {
+				emitter.complete();
+			}
+			catch (RuntimeException ex) {
+				// 이미 쓸 수 없는 연결이다
+			}
 		}
 
 		private void cancel() {

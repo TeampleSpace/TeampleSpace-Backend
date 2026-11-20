@@ -94,8 +94,16 @@ public class PresentationSnapshots {
 				member.put("membershipVersion", rs.getLong("version"));
 			});
 			snapshot.set("designSettings", json.valueToTree(designs.get(actor.userId(), projectId)));
-			snapshot.set("activeJobs", json.valueToTree(
-					jobs.list(actor.userId(), projectId, null, "queued,running", null, null, null, 100).get("items")));
+			// 진행 중인 작업은 페이지를 끝까지 읽어 모두 담는다
+			ArrayNode activeJobs = snapshot.putArray("activeJobs");
+			String cursor = null;
+			do {
+				Map<String, Object> page = jobs.list(actor.userId(), projectId, null, "queued,running", null, null,
+						cursor, 100);
+				activeJobs.addAll((ArrayNode) json.valueToTree(page.get("items")));
+				cursor = (String) page.get("nextCursor");
+			}
+			while (cursor != null);
 			// 요소가 자료를 참조하는 기능이 생기기 전이라 비어 있다
 			snapshot.putArray("materials");
 			return (JsonNode) snapshot;
