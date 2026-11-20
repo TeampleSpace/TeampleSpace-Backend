@@ -11,6 +11,7 @@
 - 동기화 스냅샷은 `scope=editor`만 받고 그 밖의 값은 `VALIDATION_FAILED`로 거절한다
 - 이벤트 구독은 `Last-Event-ID`가 없으면 연결한 뒤의 이벤트만 보낸다
 - 세 경로 모두 참여한 적 없는 사용자는 `NOT_FOUND`, 나갔거나 제거된 팀원은 `ACCESS_DENIED`다
+- 요소 수정은 요소 종류에 맞지 않는 내용과 스타일을 `VALIDATION_FAILED`로 거절한다. 이미지의 `fileObjectId`는 아직 바꿀 수 없다
 
 ## 2026-11-20 자료의 AI 요약 요청 추가
 
