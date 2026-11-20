@@ -85,8 +85,35 @@ jobs:
         run: |
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$REGISTRY_IMAGE:$GITHUB_SHA"
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: home-dev
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: backend-home-dev-deploy
+      cancel-in-progress: false
+    steps:
+      - name: 홈 서버에 발행한 이미지 반영
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
-          if [[ "$current" == "$GITHUB_SHA" ]]; then
-            docker tag "$REGISTRY_IMAGE:$GITHUB_SHA" "$REGISTRY_IMAGE:home-dev"
-            docker push "$REGISTRY_IMAGE:home-dev"
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo "더 새로운 main 커밋이 있어 이 커밋은 배포하지 않습니다."
+            exit 0
           fi
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # 서버의 강제 명령이 토큰을 표준 입력으로 받는다
+          printf '%s' "$GH_TOKEN" | ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 "$DEPLOY_TARGET" "$GITHUB_SHA"

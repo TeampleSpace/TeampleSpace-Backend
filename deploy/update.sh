@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-registry=ghcr.io/teamplespace/teamplespace-backend
-
-if [[ $# == 0 ]]; then
-  docker pull "$registry:home-dev"
-  digests=$(docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$registry:home-dev")
-  API_IMAGE=$(printf '%s\n' "$digests" | grep -m1 "^$registry@sha256:[0-9a-f]\{64\}$")
-elif [[ $# == 1 ]]; then
-  API_IMAGE=$1
-else
-  exit 2
-fi
-export API_IMAGE
+[[ $# == 1 ]] || { echo "실행할 이미지 주소가 필요합니다." >&2; exit 2; }
+export API_IMAGE=$1
 stack=(docker compose --env-file "${DEPLOY_SETTINGS:-./settings.env}" -f compose.yaml)
 expected=$(docker image inspect -f '{{.Id}}' "$API_IMAGE")
 "${stack[@]}" up -d --wait --wait-timeout 240
