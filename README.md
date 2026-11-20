@@ -65,6 +65,32 @@ set -a && source .env && set +a
 기본 계정 값은 로컬 전용이다. 배포 환경에서는 반드시 환경변수로 실제 값을 넣고 저장소에 커밋하지 않는다.
 마이그레이션 계정을 서버 계정과 분리하려면 Spring Boot 기본 설정인 `SPRING_FLYWAY_USER`, `SPRING_FLYWAY_PASSWORD`를 사용한다.
 
+## 프로젝트 구조
+
+소스는 `src/main/java/com/teamplespace` 아래에 기능별 패키지로 나누고, 기능 패키지 안은 계층별 하위 패키지로 나눈다. 실행 진입점은 `TeampleSpaceApplication` 하나다.
+
+| 기능 패키지 | 담당 |
+| --- | --- |
+| `identity` | 로그인과 세션, 소셜 로그인, 계정 |
+| `workspace` | 프로젝트, 팀원, 초대 |
+| `materials` | 자료, 파일 업로드, 링크 수집, 요약 |
+| `composition` | 발표 구성, 디자인 설정, 프로젝트 글꼴 |
+| `presentation` | 문서 요소 수정과 스냅샷 |
+| `review` | 연속 저장을 묶은 변경 이력 |
+| `collaboration` | 프로젝트 이벤트 기록과 재생 |
+| `processing` | 오래 걸리는 작업의 대기열과 실행 |
+| `platform` | 기능 공통 코드. 오류 응답, 요청 식별자, 멱등 처리, AI 호출 |
+
+| 계층 패키지 | 두는 것 |
+| --- | --- |
+| `controller` | HTTP 경로와 요청, 응답 변환 |
+| `service` | 업무 규칙과 DB 접근, 서비스가 쓰는 입력 모델과 인터페이스 |
+| `infra` | 외부 시스템 연동. AI, 메일, 소셜 로그인 제공자, 링크 수집, 파일 보관 |
+| `config` | 스프링 설정과 설정값 읽기 |
+
+- 계층 패키지는 해당 클래스가 있을 때만 만든다
+- 테스트는 검증 대상과 같은 패키지에 둔다. HTTP 통합 테스트는 `controller`, 테스트 공용 도구는 `support`에 둔다
+
 ## DB 규칙
 
 - 연결 시간대는 UTC, 쓰기 격리 수준은 READ COMMITTED
