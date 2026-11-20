@@ -1,6 +1,11 @@
 package com.teamplespace.presentation.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
@@ -13,8 +18,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import com.teamplespace.collaboration.service.ProjectEvents;
 import com.teamplespace.contracts.ContractSchemas;
 import com.teamplespace.support.HttpIntegrationSupport;
 
@@ -24,6 +33,9 @@ import tools.jackson.databind.node.ObjectNode;
 // 편집 화면이 쓰는 저장, 동기화 스냅샷, 이벤트 구독을 실제 HTTP로 확인한다
 @TestPropertySource(properties = "teamplespace.editor.sample-presentation-enabled=true")
 class EditorHttpTests extends HttpIntegrationSupport {
+
+	@MockitoSpyBean
+	ProjectEvents events;
 
 	@Test
 	void snapshotFollowsContractBeforeAndAfterDocumentExists() throws Exception {
@@ -182,6 +194,53 @@ class EditorHttpTests extends HttpIntegrationSupport {
 			assertThat(ContractSchemas.validate("api.schema.json#/$defs/SnapshotRequired", signal.get(0).get("data")))
 				.isEmpty();
 			assertThat(json.readTree(signal.get(0).get("data")).get("projectId").asString()).isEqualTo(project);
+		}
+	}
+
+	@Test
+	void subscriptionEndsWhenEventLookupFailsSoClientCanReconnect() throws Exception {
+		Browser owner = signup("소유자");
+		String project = createProject(owner, "조회 실패");
+		HttpResponse<Stream<String>> stream = owner.lines("/projects/" + project + "/events", Map.of());
+		assertThat(stream.statusCode()).isEqualTo(200);
+
+		// 구독 중에 DB 조회가 실패하면 연결을 끝낸다
+		doThrow(new DataAccessResourceFailureException("조회 실패")).when(events)
+			.after(any(), eq(UUID.fromString(project)), anyString(), anyInt());
+		assertThat(messages(stream, null)).isEmpty();
+
+		// 조회가 회복되면 다시 구독해 이어 받는다
+		Mockito.reset(events);
+		JsonNode title = sampleElement(owner, project, 0, 1);
+		JsonNode saved = owner.request("PATCH", path(title), textPatch(title, "다시 구독"), 200,
+				UUID.randomUUID().toString());
+		List<Map<String, String>> replayed = messages(
+				owner.lines("/projects/" + project + "/events", Map.of("Last-Event-ID", "0")),
+				saved.get("eventId").asString());
+		assertThat(replayed).extracting(message -> message.get("id")).contains(saved.get("eventId").asString());
+	}
+
+	@Test
+	void snapshotIncludesEveryActiveJobBeyondOnePage() throws Exception {
+		Browser owner = signup("소유자");
+		String project = createProject(owner, "작업이 많은 프로젝트");
+		try {
+			// 임대가 한참 남은 실행 중 작업이라 작업 실행기가 건드리지 않는다
+			for (int index = 0; index < 101; index++) {
+				jdbc.sql("""
+						INSERT INTO jobs (id, project_id, requester_id, type, target_type, status, input_snapshot,
+						                  input_hash, available_at, attempt_no, lease_token, lease_expires_at)
+						VALUES (UUID_TO_BIN(UUID()), UUID_TO_BIN(?), UUID_TO_BIN(?), 'snapshot_check', 'project',
+						        'running', JSON_OBJECT(), UNHEX(SHA2(UUID(), 256)), UTC_TIMESTAMP(6), 1,
+						        UNHEX(SHA2(UUID(), 256)), UTC_TIMESTAMP(6) + INTERVAL 1 DAY)
+						""").params(project, owner.userId).update();
+			}
+			JsonNode snapshot = owner.get("/projects/" + project + "/sync-snapshot?scope=editor");
+			assertThat(ContractSchemas.validate("api.schema.json#/$defs/SyncSnapshot", snapshot.toString())).isEmpty();
+			assertThat(snapshot.get("activeJobs")).hasSize(101);
+		}
+		finally {
+			jdbc.sql("DELETE FROM jobs WHERE project_id = UUID_TO_BIN(?)").param(project).update();
 		}
 	}
 
