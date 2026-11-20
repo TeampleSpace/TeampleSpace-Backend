@@ -5,6 +5,12 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-21 슬라이드와 요소의 추가, 삭제, 순서 변경 추가
+
+- `SlideCreateRequest`, `SlideDeleteRequest`, `SlideOrderRequest`, `ElementCreateRequest`, `ElementDeleteRequest`와 예제를 추가
+- `DocumentChange`에 바뀐 뒤의 전체 슬라이드 순서 `slideIds`를 추가. 순서만 바꾼 응답과 이벤트는 `resource`와 `tombstone` 없이 `slideIds`만 싣는다. `resource`와 `tombstone`을 함께 싣는 것은 여전히 받지 않는다
+- 요소 추가는 `element.updated`로 전달하고 새 슬라이드와 새 요소의 식별자는 클라이언트가 만든다
+
 ## 2026-11-20 편집 경로의 HTTP 공개
 
 - 요소 수정, 동기화 스냅샷, 이벤트 구독을 HTTP 경로로 열었다. 스키마와 예제는 바뀌지 않았다
