@@ -104,8 +104,10 @@ set -a && source .env && set +a
 - 요소 수정 저장 경로는 `ElementPatchService`에 있다. 문서 변경, 변경 이력, 이벤트, 멱등 결과를 한 트랜잭션으로 저장한다
 - 연속 저장은 `ChangeGroups`가 하나의 변경으로 묶는다. 2초 동안 입력이 없거나 30초가 지나면 닫으며 값은 `teamplespace.edit-group.idle-timeout`, `teamplespace.edit-group.max-duration`으로 바꿀 수 있다
 - `PresentationSnapshots`는 문서와 이벤트 커서를 같은 시점에서 읽고 `ProjectEvents`는 커서 다음 이벤트를 순서대로 돌려준다
+- 편집 화면이 쓰는 요소 저장, 동기화 스냅샷, 이벤트 구독은 `EditorController`가 HTTP 경로로 연다. 로그인 세션을 편집 세션으로 쓴다
+- 이벤트 구독은 `EventStreams`가 연결마다 0.5초 간격으로 새 이벤트를 조회해 SSE로 보낸다. 조회할 때마다 프로젝트 참여 여부를 다시 확인하고 연결은 5분 뒤 끝나 클라이언트가 다시 구독한다
+- 문서 생성 기능이 생기기 전까지 편집 화면 확인에 쓸 예제 문서는 `POST /v1/projects/{projectId}/sample-presentation`으로 만든다. `teamplespace.editor.sample-presentation-enabled=true`로 켠 개발과 테스트 환경에서만 동작하고 기본값에서는 `NOT_FOUND`로 응답한다
 - 모든 HTTP 요청에 요청 식별자를 붙여 로그, `X-Request-Id` 응답 헤더, 오류 본문에 같은 값으로 남긴다. 오류는 계약의 공통 오류 형식으로 응답한다
-- 운영 인증이 아직 없어 HTTP 경로로 노출하지 않았다. 사용자와 편집 세션 식별자는 테스트가 만들어 넘긴다
 - 요청과 응답 형식은 `contracts` 폴더의 계약을 따른다
 - PPTX와 PDF 출력은 실험만 했다. 방법과 결과는 `experiments/export/README.md`에 있다
 - 0단계에서 끝낸 것과 남은 확인 사항, 실행한 검증은 `../Docs/be/stage-0-result.md`에 있다
