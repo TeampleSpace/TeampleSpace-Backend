@@ -2,6 +2,7 @@ package com.teamplespace.platform.ai;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.config.ConnectionConfig;
@@ -45,6 +46,8 @@ public class OpenAiResponsesClient {
 
 	private final ObjectMapper json;
 	private final CloseableHttpClient http;
+	private final RequestConfig defaults = RequestConfig.custom().setConnectionRequestTimeout(Timeout.ofSeconds(5))
+		.setResponseTimeout(Timeout.ofSeconds(40)).build();
 
 	public OpenAiResponsesClient(ObjectMapper json) {
 		this.json = json;
@@ -53,8 +56,7 @@ public class OpenAiResponsesClient {
 					.setSocketTimeout(Timeout.ofSeconds(40)).build())
 			.build();
 		http = HttpClients.custom().setConnectionManager(connections)
-			.setDefaultRequestConfig(RequestConfig.custom().setConnectionRequestTimeout(Timeout.ofSeconds(5))
-					.setResponseTimeout(Timeout.ofSeconds(40)).build())
+			.setDefaultRequestConfig(defaults)
 			.disableRedirectHandling().disableAutomaticRetries().build();
 	}
 
@@ -68,7 +70,15 @@ public class OpenAiResponsesClient {
 	}
 
 	public JsonNode generate(URI endpoint, String apiKey, ObjectNode request) {
+		return generate(endpoint, apiKey, request, null);
+	}
+
+	// 응답이 긴 요청은 기본 대기 시간보다 길게 기다린다
+	public JsonNode generate(URI endpoint, String apiKey, ObjectNode request, Duration responseTimeout) {
 		var post = new HttpPost(endpoint);
+		if (responseTimeout != null) {
+			post.setConfig(RequestConfig.copy(defaults).setResponseTimeout(Timeout.of(responseTimeout)).build());
+		}
 		post.setHeader("Authorization", "Bearer " + apiKey);
 		post.setHeader("Accept", "application/json");
 		post.setEntity(new StringEntity(json.writeValueAsString(request), ContentType.APPLICATION_JSON));

@@ -11,7 +11,8 @@ import com.teamplespace.platform.error.ErrorCode;
 
 import tools.jackson.databind.JsonNode;
 
-record OutlineInput(long expectedVersion, List<Item> items) {
+// 구성과 발표 생성 요청이 함께 쓰는 입력 검사
+public record OutlineInput(long expectedVersion, List<Item> items) {
 	static final long MAX_VERSION = 9_007_199_254_740_991L;
 	private static final int MAX_ITEMS = 100;
 	private static final int MAX_SOURCES = 20;
@@ -49,15 +50,18 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 	}
 
 	static long expectedVersion(JsonNode body) {
-		JsonNode version = body.path("expectedVersion");
+		return version(body.path("expectedVersion"), "expectedVersion");
+	}
+
+	public static long version(JsonNode version, String field) {
 		if (!version.isIntegralNumber() || !version.canConvertToLong()
 				|| version.asLong() < 1 || version.asLong() > MAX_VERSION) {
-			throw invalid("expectedVersion", "버전을 확인해 주세요.");
+			throw invalid(field, "버전을 확인해 주세요.");
 		}
 		return version.asLong();
 	}
 
-	static List<UUID> sources(JsonNode value, String field) {
+	public static List<UUID> sources(JsonNode value, String field) {
 		if (!value.isArray() || value.size() > MAX_SOURCES) {
 			throw invalid(field, "한 항목에 근거 자료를 20개까지 연결할 수 있어요.");
 		}
@@ -73,7 +77,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		return List.copyOf(ids);
 	}
 
-	static void checkFields(JsonNode value, Set<String> allowed, String field) {
+	public static void checkFields(JsonNode value, Set<String> allowed, String field) {
 		if (!value.isObject() || !allowed.containsAll(value.propertyNames())) {
 			throw invalid(field, "요청 항목을 확인해 주세요.");
 		}
@@ -94,7 +98,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		throw invalid(field, "식별자를 확인해 주세요.");
 	}
 
-	static String text(JsonNode node, String field, int max) {
+	public static String text(JsonNode node, String field, int max) {
 		if (!node.isString()) {
 			throw invalid(field, "입력 형식과 글자 수를 확인해 주세요.");
 		}
@@ -105,7 +109,7 @@ record OutlineInput(long expectedVersion, List<Item> items) {
 		return value;
 	}
 
-	static ApiException invalid(String field, String message) {
+	public static ApiException invalid(String field, String message) {
 		return ApiException.field(ErrorCode.VALIDATION_FAILED, field, "INVALID_VALUE", message);
 	}
 }
