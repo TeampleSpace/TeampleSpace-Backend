@@ -126,6 +126,8 @@ public class WorkspaceService {
 		long next=((Number)member.get("version")).longValue()+1;
 		jdbc.sql("UPDATE project_memberships SET state=?,version=version+1,left_at=UTC_TIMESTAMP(6) WHERE project_id=UUID_TO_BIN(?) AND user_id=UUID_TO_BIN(?)")
 			.params(self?"left":"removed",id.toString(),target.toString()).update();
+		// 내보낸 사람이 받은 링크를 막고 다음 링크 조회에서 새 초대를 만든다
+		if(!self)jdbc.sql("UPDATE project_invitations SET state='revoked' WHERE project_id=UUID_TO_BIN(?) AND state='active'").param(id.toString()).update();
 		long event=events.append(id,"membership.changed",actor,input.clientMutationId(),target,json.valueToTree(Map.of("userId",target.toString(),"state",self?"left":"removed","membershipVersion",next)));
 		var result=Map.<String,Object>of("clientMutationId",input.clientMutationId(),"tombstone",Map.of("type","membership","id",target.toString(),"deleted",true),"membershipVersion",next,"eventId",Long.toString(event));
 		idempotency.complete(key,true,200,json.writeValueAsString(result),target);return result;
