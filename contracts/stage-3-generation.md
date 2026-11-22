@@ -20,6 +20,7 @@
 - 권한 확인 후 `Idempotency-Key`를 검사한다. 같은 프로젝트에 진행 중인 생성 작업이 있으면 `REQUEST_IN_PROGRESS`다
 - [고정 입력](examples/presentation-job-input.json)에 요청에서 확정한 [스냅샷](examples/presentation-generation-snapshot.json)과 모델, 프롬프트 개정을 저장한다. 제공자에게 구성 항목의 제목과 설명, 선택한 자료의 제목과 2000자 이하 텍스트, 직접 입력 디자인의 지침을 보낸다. 계정과 내부 식별자는 보내지 않는다
 - 제공자는 발표 제목과 소개, 구성 항목마다 한 장의 제목과 문장 1개에서 5개, 마지막 정리 슬라이드의 글만 만든다. 서버가 디자인 설정의 배경색, 제목색, 글꼴로 1280 x 720 캔버스의 텍스트와 도형 요소를 배치한다. 슬라이드는 표지, 구성 항목 순서의 본문, 정리 순서이고 본문 아래에 연결된 자료 제목을 출처로 적는다
+- 제목색이 배경과 3:1 대비가 안 되면 제목과 강조 도형은 본문색을 쓴다. 직접 입력에서 프로젝트 글꼴을 고르면 텍스트의 `fontFamily`는 `ProjectFont-{fontAssetId}`이고, 화면은 그 글꼴 파일을 이 이름으로 등록해 그린다
 - 슬라이드 수가 구성 항목과 다르거나 글이 글상자에 넘치는 길이면 `JOB_PRESENTATION_INVALID_RESULT`로 끝내고 저장하지 않는다. 일시적인 제공자 오류만 같은 작업에서 내부 재시도한다
 - 발행 직전 요청자의 접근 권한, 구성과 디자인 버전, 자료의 고정 개정, 발표 자료가 아직 없는지를 다시 검사한다. 바뀌었으면 `JOB_INPUT_STALE`, 권한이 회수됐으면 `JOB_PRESENTATION_ACCESS_REVOKED`로 끝내고 아무것도 저장하지 않는다
 - 성공하면 발표 자료와 슬라이드, 요소를 한 트랜잭션에서 만들고 `presentation.replaced` 이벤트를 보낸다. 이벤트의 `presentationVersion`과 `generation`은 1이다. [결과 참조](examples/presentation-job-result.json)의 발표 ID로 동기화 스냅샷을 다시 읽는다
