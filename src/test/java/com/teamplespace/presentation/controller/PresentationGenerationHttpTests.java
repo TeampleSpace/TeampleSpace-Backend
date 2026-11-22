@@ -21,6 +21,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.teamplespace.composition.service.ProjectFontTests;
 import com.teamplespace.contracts.ContractSchemas;
 import com.teamplespace.presentation.service.PresentationGeneration;
 import com.teamplespace.processing.service.JobQueue;
@@ -198,6 +199,33 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		assertThat(presentations(project)).isEqualTo(1);
 		assertThat(jdbc.sql("SELECT COUNT(*) FROM slides WHERE project_id = UUID_TO_BIN(?)").param(project)
 			.query(Integer.class).single()).isZero();
+	}
+
+	@Test
+	void customDesignKeepsProjectFontAndReadableHeadings() throws Exception {
+		Browser owner = signup("직접 디자인 소유자");
+		String project = createProject(owner, "직접 디자인 생성");
+		String source = memo(owner, project, "디자인 원문");
+		saveOutline(owner, project, 1, source);
+		String csrf = owner.bootstrap().get("csrfToken").asString();
+		var uploaded = owner.raw("POST", "/v1/projects/" + project + "/design-fonts?fileName=team.ttf",
+				ProjectFontTests.directory(false), Map.of("Origin", "http://localhost:5174", "X-CSRF-Token", csrf,
+						"Content-Type", "application/octet-stream"));
+		assertThat(uploaded.statusCode()).isEqualTo(200);
+		String fontId = json.readTree(uploaded.body()).get("id").asString();
+		owner.request("PUT", "/projects/" + project + "/design-settings", Map.of("mode", "custom", "expectedVersion", 1,
+				"custom", Map.of("name", "흰 대표색", "font", "Pretendard", "fontAssetId", fontId,
+						"primaryColor", "#FFFFFF")), 200, UUID.randomUUID().toString());
+
+		JsonNode job = owner.request("POST", "/projects/" + project + "/presentation-jobs", request(2, 2, source), 202,
+				UUID.randomUUID().toString());
+		jobs.run(claim(job));
+		JsonNode cover = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
+			.get("slides").get(0).get("elements");
+		assertThat(cover.get(0).get("style").get("fill").asString()).isEqualTo("#FFFFFF");
+		assertThat(cover.get(1).get("style").get("fill").asString()).isEqualTo("#1F2933");
+		assertThat(cover.get(2).get("style").get("color").asString()).isEqualTo("#1F2933");
+		assertThat(cover.get(2).get("style").get("fontFamily").asString()).isEqualTo("ProjectFont-" + fontId);
 	}
 
 	private Map<String, Object> request(long outline, long design, String source) {
