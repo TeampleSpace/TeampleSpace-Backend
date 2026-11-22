@@ -17,13 +17,31 @@ final class SlideLayouts {
 
 	record Theme(String font, String background, String heading, String body) {
 
-		// 어두운 배경에는 밝은 본문색을 쓴다
+		// 본문은 배경과 대비가 큰 색을 쓰고 제목색이 배경과 3:1 대비가 안 되면 본문색으로 바꾼다
 		static Theme of(String font, String background, String heading) {
-			int rgb = Integer.parseInt(background.substring(1), 16);
-			double luminance = (0.2126 * (rgb >> 16) + 0.7152 * (rgb >> 8 & 0xFF) + 0.0722 * (rgb & 0xFF)) / 255;
-			return new Theme(font, background, heading, luminance < 0.5 ? "#F5F7FA" : "#1F2933");
+			String body = contrast(background, LIGHT) >= contrast(background, DARK) ? LIGHT : DARK;
+			return new Theme(font, background, contrast(background, heading) < 3 ? body : heading, body);
+		}
+
+		static double contrast(String first, String second) {
+			double a = luminance(first);
+			double b = luminance(second);
+			return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+		}
+
+		private static double luminance(String hex) {
+			int rgb = Integer.parseInt(hex.substring(1), 16);
+			return 0.2126 * channel(rgb >> 16) + 0.7152 * channel(rgb >> 8 & 0xFF) + 0.0722 * channel(rgb & 0xFF);
+		}
+
+		private static double channel(int value) {
+			double c = value / 255.0;
+			return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 		}
 	}
+
+	private static final String LIGHT = "#F5F7FA";
+	private static final String DARK = "#1F2933";
 
 	record Element(String type, int x, int y, int width, int height, ObjectNode content, ObjectNode style) {
 	}

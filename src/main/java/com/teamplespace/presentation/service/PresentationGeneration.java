@@ -324,8 +324,10 @@ public class PresentationGeneration implements JobHandler {
 					color(template.path("preview").path("backgroundColor"), "#FFFFFF"),
 					color(template.path("preview").path("headingColor"), "#212735"));
 		}
+		// 프로젝트 글꼴은 화면이 글꼴 파일을 불러와 등록하는 이름으로 적는다
 		JsonNode custom = design.custom();
-		String font = custom.path("font").asString("");
+		String font = custom.hasNonNull("fontAssetId") ? "ProjectFont-" + custom.get("fontAssetId").asString()
+				: custom.path("font").asString("");
 		return Theme.of(font.isBlank() ? FONT : font, "#FFFFFF", color(custom.path("primaryColor"), "#2864E8"));
 	}
 
