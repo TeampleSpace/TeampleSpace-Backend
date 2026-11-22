@@ -341,7 +341,7 @@ public class PresentationGeneration implements JobHandler {
 			return null;
 		}
 		List<String> shown = titles.stream().limit(SOURCE_TITLES_SHOWN).map(title -> {
-			String value = title.strip();
+			String value = title.strip().replaceAll("\\s+", " ");
 			return value.codePointCount(0, value.length()) <= SOURCE_TITLE_MAX ? value
 					: value.substring(0, value.offsetByCodePoints(0, SOURCE_TITLE_MAX)).strip();
 		}).toList();
