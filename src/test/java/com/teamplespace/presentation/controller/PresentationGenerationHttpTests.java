@@ -205,7 +205,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 	void customDesignKeepsProjectFontAndReadableHeadings() throws Exception {
 		Browser owner = signup("직접 디자인 소유자");
 		String project = createProject(owner, "직접 디자인 생성");
-		String source = memo(owner, project, "디자인 원문");
+		String source = memo(owner, project, "첫 줄\n둘\n셋\n넷");
 		saveOutline(owner, project, 1, source);
 		String csrf = owner.bootstrap().get("csrfToken").asString();
 		var uploaded = owner.raw("POST", "/v1/projects/" + project + "/design-fonts?fileName=team.ttf",
@@ -220,8 +220,10 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		JsonNode job = owner.request("POST", "/projects/" + project + "/presentation-jobs", request(2, 2, source), 202,
 				UUID.randomUUID().toString());
 		jobs.run(claim(job));
-		JsonNode cover = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
-			.get("slides").get(0).get("elements");
+		JsonNode slides = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
+			.get("slides");
+		assertThat(texts(slides.get(1))).contains("출처: 첫 줄 둘 셋 넷");
+		JsonNode cover = slides.get(0).get("elements");
 		assertThat(cover.get(0).get("style").get("fill").asString()).isEqualTo("#FFFFFF");
 		assertThat(cover.get(1).get("style").get("fill").asString()).isEqualTo("#1F2933");
 		assertThat(cover.get(2).get("style").get("color").asString()).isEqualTo("#1F2933");
