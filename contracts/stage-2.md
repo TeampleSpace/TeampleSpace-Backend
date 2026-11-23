@@ -122,7 +122,7 @@
 | DELETE /v1/materials/{materialId}/comments/{commentId} | 없음 | MaterialCommentDeleted |
 
 - 팀원이 자료에 짧은 글을 남긴다. 화면의 팀 메모를 댓글 방식으로 바꾸며 쓴다. 기존 팀 메모 API와 본문은 그대로 남는다
-- 목록은 오래된 댓글부터 나온다. limit은 기본 50, 최대 100이다. cursor는 앞 페이지 마지막 댓글의 식별자다
+- 목록은 오래된 댓글부터 나온다. limit은 기본 50, 최대 100이다. cursor는 앞 페이지 마지막 댓글의 식별자이고, 형식이 틀리거나 이 자료의 댓글이 아니면 `INVALID_CURSOR`다
 - 작성은 `Idempotency-Key`가 필수다. 본문은 앞뒤 공백을 걷어 1자에서 2000자다
 - 작성자만 지울 수 있고 다른 사람은 `FORBIDDEN`, 없는 댓글은 `NOT_FOUND`다. 이미 지운 댓글을 다시 지우면 같은 결과를 돌려준다
 - 권한과 삭제한 자료의 오류는 자료 규칙과 같다
