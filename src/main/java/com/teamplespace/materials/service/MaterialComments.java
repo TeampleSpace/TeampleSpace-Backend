@@ -55,6 +55,11 @@ public class MaterialComments {
 			throw new ApiException(ErrorCode.VALIDATION_FAILED);
 		}
 		String after = cursor == null ? null : cursorId(cursor);
+		// 이 자료의 댓글이 아닌 커서는 빈 페이지 대신 오류로 알린다
+		if (after != null && jdbc.sql("SELECT COUNT(*) FROM material_comments WHERE id = UUID_TO_BIN(?) AND material_id = UUID_TO_BIN(?)")
+			.params(after, materialId.toString()).query(Integer.class).single() == 0) {
+			throw new ApiException(ErrorCode.INVALID_CURSOR);
+		}
 		List<Map<String, Object>> items = jdbc.sql("""
 				SELECT BIN_TO_UUID(c.id) AS id, c.body, BIN_TO_UUID(c.author_id) AS author_id, u.display_name, c.created_at
 				FROM material_comments c JOIN users u ON u.id = c.author_id
@@ -79,7 +84,8 @@ public class MaterialComments {
 	@Transactional
 	public Map<String, Object> create(UUID actor, UUID materialId, CommentRequest input, String keyValue) {
 		var row = materials.writable(actor, materialId);
-		String body = materials.text(input.body(), "body", BODY_MAX, true).strip();
+		// 앞뒤 공백을 걷은 뒤 길이를 잰다
+		String body = materials.text(input.body() == null ? null : input.body().strip(), "body", BODY_MAX, true);
 		if (body.isEmpty()) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "body", "REQUIRED", "내용을 입력해 주세요.");
 		}
