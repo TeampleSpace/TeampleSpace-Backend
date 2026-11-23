@@ -347,6 +347,9 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 		member.request("POST", path, Map.of("body", "키 없음"), 400, null);
 		member.request("POST", path, Map.of("body", "   "), 422, UUID.randomUUID().toString());
 		member.request("POST", path, Map.of("body", "가".repeat(2001)), 422, UUID.randomUUID().toString());
+		// 공백을 걷은 뒤 2000자면 받는다
+		JsonNode full = member.request("POST", path, Map.of("body", "  " + "나".repeat(2000) + "  "), 201, UUID.randomUUID().toString());
+		member.request("DELETE", path + "/" + full.get("id").asString(), null, 200);
 		owner.request("POST", path, Map.of("body", "좋아요, 그렇게 할게요"), 201, UUID.randomUUID().toString());
 		owner.request("POST", path, Map.of("body", "출처도 같이 적을게요"), 201, UUID.randomUUID().toString());
 
@@ -358,6 +361,8 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 		assertThat(rest.get("items")).hasSize(1);
 		assertThat(rest.get("items").get(0).get("body").asString()).isEqualTo("출처도 같이 적을게요");
 		assertThat(rest.get("nextCursor").isNull()).isTrue();
+		owner.request("GET", path + "?cursor=" + UUID.randomUUID(), null, 422);
+		owner.request("GET", path + "?cursor=not-a-cursor", null, 422);
 
 		String comment = path + "/" + first.get("id").asString();
 		owner.request("DELETE", comment, null, 403);
@@ -369,7 +374,7 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 		assertThat(jdbc.sql("""
 				SELECT COUNT(*) FROM project_events
 				WHERE type IN ('material.comment.created', 'material.comment.deleted') AND resource_id = UUID_TO_BIN(?)
-				""").param(id).query(Integer.class).single()).isEqualTo(4);
+				""").param(id).query(Integer.class).single()).isEqualTo(6);
 
 		stranger.request("GET", path, null, 404);
 		stranger.request("POST", path, Map.of("body", "외부 댓글"), 404, UUID.randomUUID().toString());
