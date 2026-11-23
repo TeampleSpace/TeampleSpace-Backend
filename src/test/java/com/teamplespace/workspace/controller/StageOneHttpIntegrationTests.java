@@ -161,8 +161,10 @@ class StageOneHttpIntegrationTests {
         JsonNode removed = owner.request("DELETE", "/projects/" + id + "/members/" + memberId, remove, 200, removeKey);
         JsonNode replay = owner.request("DELETE", "/projects/" + id + "/members/" + memberId, remove, 200, removeKey);
         assertThat(replay.get("eventId").asString()).isEqualTo(removed.get("eventId").asString());
-        member.request("POST", "/invitations/" + token + "/accept", null, 403);
-        String fresh = invitationToken(owner.request("POST", "/projects/" + id + "/invitations", Map.of("rotate", true), 200));
+        member.request("POST", "/invitations/" + token + "/accept", null, 404);
+        // 내보낸 뒤 링크를 다시 복사하면 새 초대가 나와 바로 다시 참여할 수 있다
+        String fresh = invitationToken(owner.request("POST", "/projects/" + id + "/invitations", Map.of("rotate", false), 200));
+        assertThat(fresh).isNotEqualTo(token);
         owner.request("GET", "/invitations/" + token, null, 404);
         member.request("POST", "/invitations/" + fresh + "/accept", null, 200);
         JsonNode transferred = owner.request("POST", "/projects/" + id + "/ownership", Map.of("targetUserId", memberId, "expectedVersion", 1), 200);
