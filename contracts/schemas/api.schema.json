@@ -228,6 +228,8 @@
         "material.updated",
         "material.deleted",
         "material.note.updated",
+        "material.comment.created",
+        "material.comment.deleted",
         "outline.updated",
         "design.updated",
         "presentation.replaced",
