@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.teamplespace.collaboration.service.EventStreams;
+import com.teamplespace.collaboration.service.Presence;
 import com.teamplespace.identity.service.AuthService;
 import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
@@ -43,13 +44,20 @@ public class EditorController {
 
 	private final SamplePresentations samples;
 
+	private final Presence presence;
+
+	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
+	record PresenceRequest(UUID slideId, Double x, Double y) {
+	}
+
 	public EditorController(AuthService auth, ElementPatchService patches, PresentationSnapshots snapshots,
-			EventStreams streams, SamplePresentations samples) {
+			EventStreams streams, SamplePresentations samples, Presence presence) {
 		this.auth = auth;
 		this.patches = patches;
 		this.snapshots = snapshots;
 		this.streams = streams;
 		this.samples = samples;
+		this.presence = presence;
 	}
 
 	@PatchMapping("/slides/{slideId}/elements/{elementId}")
@@ -81,6 +89,13 @@ public class EditorController {
 	SseEmitter events(@PathVariable UUID projectId,
 			@RequestHeader(name = "Last-Event-ID", required = false) String lastEventId, HttpServletRequest request) {
 		return streams.open(actor(request), projectId, lastEventId);
+	}
+
+	@PostMapping("/projects/{projectId}/presence")
+	ResponseEntity<Void> presence(@PathVariable UUID projectId, @RequestBody PresenceRequest input,
+			HttpServletRequest request) {
+		presence.update(actor(request), projectId, input.slideId(), input.x(), input.y());
+		return ResponseEntity.noContent().build();
 	}
 
 	// 설정으로 켠 개발과 시험 환경에서만 동작하고 그 밖에는 없는 경로처럼 응답한다
