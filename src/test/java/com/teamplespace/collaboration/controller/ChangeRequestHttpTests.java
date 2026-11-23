@@ -90,6 +90,36 @@ class ChangeRequestHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void stalledApprovalIsRetriedOnlyWhileItsResultCanStillBeRecovered() throws Exception {
+		Browser owner = signup("복구 소유자");
+		Browser member = signup("복구 요청자");
+		String projectId = createProject(owner, "승인 복구 " + UUID.randomUUID());
+		join(owner, member, projectId);
+		JsonNode templates = owner.get("/templates").get("items");
+
+		// 승인하던 서버가 몇 분 전에 멈춘 요청은 다시 승인해 실행한다
+		String recent = request(member, projectId, "design_change", design(1, templates.get(0)), 201).get("id").asString();
+		stall(recent, owner.userId, "3 MINUTE");
+		assertThat(owner.get("/projects/" + projectId + "/requests").get("items").get(0).get("state").asString()).isEqualTo("pending");
+		JsonNode retried = owner.request("POST", "/requests/" + recent + "/approve", null, 200);
+		assertThat(retried.get("state").asString()).isEqualTo("approved");
+		assertThat(owner.get("/projects/" + projectId + "/design-settings").get("version").asLong()).isEqualTo(2);
+
+		// 멱등 기록이 사라질 만큼 오래 멈춘 요청은 다시 실행하지 않고 실패로 닫는다
+		String old = request(member, projectId, "design_change", design(2, templates.get(1)), 201).get("id").asString();
+		stall(old, owner.userId, "21 HOUR");
+		JsonNode closed = owner.request("POST", "/requests/" + old + "/approve", null, 200);
+		assertThat(closed.get("state").asString()).isEqualTo("failed");
+		assertThat(closed.get("error").get("message").asString()).contains("다시 요청");
+		assertThat(owner.get("/projects/" + projectId + "/design-settings").get("version").asLong()).isEqualTo(2);
+	}
+
+	private void stall(String requestId, String deciderId, String ago) {
+		jdbc.sql("UPDATE change_requests SET state = 'approving', decided_by = UUID_TO_BIN(?), decided_at = UTC_TIMESTAMP(6) - INTERVAL "
+				+ ago + " WHERE id = UUID_TO_BIN(?)").params(deciderId, requestId).update();
+	}
+
+	@Test
 	void rejectedCanceledAndFailedRequestsChangeNothing() throws Exception {
 		Browser owner = signup("거절 소유자");
 		Browser member = signup("거절 요청자");
