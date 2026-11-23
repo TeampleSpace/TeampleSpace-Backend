@@ -326,6 +326,61 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void commentsAreListedOldestFirstAndOnlyTheAuthorDeletesThem() throws Exception {
+		Browser owner = signup("댓글 소유자");
+		Browser member = signup("댓글 팀원");
+		Browser stranger = signup("댓글 외부인");
+		String projectId = createProject(owner, "자료 댓글 " + UUID.randomUUID());
+		join(owner, member, projectId);
+		String id = memo(owner, projectId, "댓글 대상", "원문").get("id").asString();
+		String path = "/materials/" + id + "/comments";
+		assertMatches("api.schema.json#/$defs/MaterialCommentList", member.get(path));
+
+		String key = UUID.randomUUID().toString();
+		JsonNode first = member.request("POST", path, Map.of("body", "  12쪽 표를 2장에 넣으면 좋겠어요  "), 201, key);
+		assertMatches("api.schema.json#/$defs/MaterialComment", first);
+		assertThat(first.get("body").asString()).isEqualTo("12쪽 표를 2장에 넣으면 좋겠어요");
+		assertThat(first.get("author").get("name").asString()).isEqualTo("댓글 팀원");
+		// 응답을 받지 못해 같은 키로 다시 보내도 댓글은 하나다
+		assertThat(member.request("POST", path, Map.of("body", "  12쪽 표를 2장에 넣으면 좋겠어요  "), 201, key)).isEqualTo(first);
+		member.request("POST", path, Map.of("body", "다른 본문"), 409, key);
+		member.request("POST", path, Map.of("body", "키 없음"), 400, null);
+		member.request("POST", path, Map.of("body", "   "), 422, UUID.randomUUID().toString());
+		member.request("POST", path, Map.of("body", "가".repeat(2001)), 422, UUID.randomUUID().toString());
+		owner.request("POST", path, Map.of("body", "좋아요, 그렇게 할게요"), 201, UUID.randomUUID().toString());
+		owner.request("POST", path, Map.of("body", "출처도 같이 적을게요"), 201, UUID.randomUUID().toString());
+
+		JsonNode page = owner.get(path + "?limit=2");
+		assertMatches("api.schema.json#/$defs/MaterialCommentList", page);
+		assertThat(page.get("items")).hasSize(2);
+		assertThat(page.get("items").get(0).get("id").asString()).isEqualTo(first.get("id").asString());
+		JsonNode rest = owner.get(path + "?limit=2&cursor=" + page.get("nextCursor").asString());
+		assertThat(rest.get("items")).hasSize(1);
+		assertThat(rest.get("items").get(0).get("body").asString()).isEqualTo("출처도 같이 적을게요");
+		assertThat(rest.get("nextCursor").isNull()).isTrue();
+
+		String comment = path + "/" + first.get("id").asString();
+		owner.request("DELETE", comment, null, 403);
+		JsonNode deleted = member.request("DELETE", comment, null, 200);
+		assertMatches("api.schema.json#/$defs/MaterialCommentDeleted", deleted);
+		assertThat(member.request("DELETE", comment, null, 200)).isEqualTo(deleted);
+		member.request("DELETE", path + "/" + UUID.randomUUID(), null, 404);
+		assertThat(owner.get(path).get("items")).hasSize(2);
+		assertThat(jdbc.sql("""
+				SELECT COUNT(*) FROM project_events
+				WHERE type IN ('material.comment.created', 'material.comment.deleted') AND resource_id = UUID_TO_BIN(?)
+				""").param(id).query(Integer.class).single()).isEqualTo(4);
+
+		stranger.request("GET", path, null, 404);
+		stranger.request("POST", path, Map.of("body", "외부 댓글"), 404, UUID.randomUUID().toString());
+		removeMember(owner, projectId, member.userId);
+		member.request("GET", path, null, 403);
+		member.request("POST", path, Map.of("body", "제거 뒤 댓글"), 403, UUID.randomUUID().toString());
+		owner.request("DELETE", "/materials/" + id, Map.of("expectedVersion", owner.get("/materials/" + id).get("version").asInt()), 200);
+		owner.request("GET", path, null, 410);
+	}
+
+	@Test
 	void concurrentNoteSavesWithTheSameVersionLetOnlyOneThrough() throws Exception {
 		Browser owner = signup("동시 저장 소유자");
 		Browser member = signup("동시 저장 팀원");
