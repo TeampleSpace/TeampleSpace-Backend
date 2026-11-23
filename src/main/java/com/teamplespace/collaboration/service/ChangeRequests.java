@@ -36,6 +36,8 @@ public class ChangeRequests {
 	static final Set<String> TYPES = Set.of("outline_generation", "presentation_generation", "design_change");
 	private static final int PAYLOAD_MAX = 20_000;
 	private static final int LIST_MAX = 50;
+	// 멱등 기록 보존 기간인 하루보다 짧게 둔다
+	private static final int RECOVERY_LIMIT_HOURS = 20;
 
 	private final JdbcClient jdbc;
 	private final ObjectMapper json;
@@ -115,7 +117,16 @@ public class ChangeRequests {
 			if (current.requestedBy().equals(actor)) {
 				throw new ApiException(ErrorCode.FORBIDDEN);
 			}
-			// 다른 사람이 승인하던 중 멈춘 요청은 2분이 지나면 다시 승인할 수 있다
+			// 승인하던 중 멈춘 요청은 2분이 지나면 다시 승인할 수 있다. 같은 멱등 키로 실행해 결과를 되찾는다
+			// 멱등 기록이 지워질 만큼 오래 멈춘 요청은 이미 실행됐는지 알 수 없으니 실패로 닫는다
+			if (current.state().equals("approving") && stale(requestId, RECOVERY_LIMIT_HOURS + " HOUR")) {
+				jdbc.sql("""
+						UPDATE change_requests SET state = 'failed', error = ?, decided_at = UTC_TIMESTAMP(6) WHERE id = UUID_TO_BIN(?)
+						""").params(failure(ErrorCode.REQUEST_NOT_PENDING, "처리 결과를 확인하지 못했어요. 다시 요청해 주세요.").toString(),
+						requestId.toString()).update();
+				append(current.projectId(), "request.updated", actor, requestId, current.type(), "failed");
+				return null;
+			}
 			int claimed = jdbc.sql("""
 					UPDATE change_requests SET state = 'approving', decided_by = UUID_TO_BIN(?), decided_at = UTC_TIMESTAMP(6)
 					WHERE id = UUID_TO_BIN(?) AND (state = 'pending'
@@ -126,6 +137,9 @@ public class ChangeRequests {
 			}
 			return current;
 		});
+		if (row == null) {
+			return view(requestId);
+		}
 		ObjectNode result = json.createObjectNode();
 		ObjectNode error = null;
 		try {
@@ -165,6 +179,8 @@ public class ChangeRequests {
 		}
 		ObjectNode failed = error;
 		tx.executeWithoutResult(status -> {
+			// 다른 처리와 같은 순서로 프로젝트를 먼저 잠근다
+			access.lock(row.projectId());
 			jdbc.sql("""
 					UPDATE change_requests SET state = ?, result = ?, error = ?, decided_at = UTC_TIMESTAMP(6)
 					WHERE id = UUID_TO_BIN(?) AND state = 'approving'
@@ -262,6 +278,11 @@ public class ChangeRequests {
 			return text;
 		}
 		return ex.code().message();
+	}
+
+	private boolean stale(UUID requestId, String interval) {
+		return jdbc.sql("SELECT COUNT(*) FROM change_requests WHERE id = UUID_TO_BIN(?) AND decided_at < UTC_TIMESTAMP(6) - INTERVAL " + interval)
+			.param(requestId.toString()).query(Integer.class).single() == 1;
 	}
 
 	private ObjectNode failure(ErrorCode code, String message) {
