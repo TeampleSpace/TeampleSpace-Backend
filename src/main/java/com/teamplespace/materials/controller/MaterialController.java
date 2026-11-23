@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.teamplespace.identity.service.AuthService;
+import com.teamplespace.materials.service.MaterialComments;
+import com.teamplespace.materials.service.MaterialComments.CommentRequest;
 import com.teamplespace.materials.service.MaterialService.DeleteRequest;
 import com.teamplespace.materials.service.MaterialService.LinkRequest;
 import com.teamplespace.materials.service.MaterialService.MemoRequest;
@@ -31,7 +33,7 @@ import com.teamplespace.materials.service.UploadService;
 import jakarta.servlet.http.HttpServletRequest;
 import tools.jackson.databind.JsonNode;
 
-// contracts/stage-2.md의 자료와 팀 메모 경로
+// contracts/stage-2.md의 자료, 팀 메모, 댓글 경로
 @RestController
 @RequestMapping("/v1")
 public class MaterialController {
@@ -42,12 +44,15 @@ public class MaterialController {
 
 	private final MaterialSummary summaries;
 
+	private final MaterialComments comments;
 	private final AuthService auth;
 
-	public MaterialController(MaterialService materials, UploadService uploads, MaterialSummary summaries, AuthService auth) {
+	public MaterialController(MaterialService materials, UploadService uploads, MaterialSummary summaries,
+			MaterialComments comments, AuthService auth) {
 		this.materials = materials;
 		this.uploads = uploads;
 		this.summaries = summaries;
+		this.comments = comments;
 		this.auth = auth;
 	}
 
@@ -127,6 +132,24 @@ public class MaterialController {
 	Map<String, Object> saveNote(@PathVariable UUID materialId, @RequestBody NoteRequest input,
 			HttpServletRequest request) {
 		return materials.saveNote(actor(request), materialId, input);
+	}
+
+	@GetMapping("/materials/{materialId}/comments")
+	Map<String, Object> comments(@PathVariable UUID materialId, @RequestParam(required = false) String cursor,
+			@RequestParam(required = false) Integer limit, HttpServletRequest request) {
+		return comments.list(actor(request), materialId, cursor, limit);
+	}
+
+	@PostMapping("/materials/{materialId}/comments")
+	ResponseEntity<?> comment(@PathVariable UUID materialId, @RequestBody CommentRequest input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.status(201).body(comments.create(actor(request), materialId, input, key));
+	}
+
+	@DeleteMapping("/materials/{materialId}/comments/{commentId}")
+	Map<String, Object> deleteComment(@PathVariable UUID materialId, @PathVariable UUID commentId,
+			HttpServletRequest request) {
+		return comments.delete(actor(request), materialId, commentId);
 	}
 
 	private UUID actor(HttpServletRequest request) {
