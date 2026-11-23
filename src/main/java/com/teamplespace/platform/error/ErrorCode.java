@@ -47,6 +47,7 @@ public enum ErrorCode {
 	EDIT_GROUP_CLOSED(409, false, "이미 닫힌 편집 묶음이에요."),
 	CHANGE_NOT_FINALIZED(409, false, "아직 편집 중인 변경이에요."),
 	REGENERATION_NOT_ENABLED(409, false, "이미 발표 자료가 있어요."),
+	REQUEST_NOT_PENDING(409, false, "이미 처리된 요청이에요."),
 	IDEMPOTENCY_KEY_REQUIRED(400, false, "Idempotency-Key 헤더가 필요해요."),
 	BAD_REQUEST(400, false, "요청 형식이 올바르지 않아요."),
 	FORBIDDEN(403, false, "권한이 없어요."),
