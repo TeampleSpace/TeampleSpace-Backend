@@ -9,6 +9,7 @@ import static org.mockito.Mockito.doThrow;
 
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -226,6 +227,44 @@ class EditorHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void cursorPositionsReachOtherMembersWithoutEventIds() throws Exception {
+		Browser owner = signup("소유자");
+		Browser member = signup("팀원");
+		Browser stranger = signup("외부인");
+		String project = createProject(owner, "커서");
+		join(owner, member, project);
+		String slide = sampleElement(owner, project, 0, 1).get("slideId").asString();
+		String path = "/projects/" + project + "/presence";
+
+		HttpResponse<Stream<String>> stream = member.lines("/projects/" + project + "/events", Map.of());
+		ObjectNode position = json.createObjectNode().put("slideId", slide).put("x", 412.5).put("y", 180);
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/PresenceUpdateRequest", position.toString())).isEmpty();
+		owner.request("POST", path, position, 204);
+		// 내 위치는 내 구독으로 오지 않는다
+		member.request("POST", path, position, 204);
+
+		Map<String, String> moved = firstNamed(stream.body().iterator(), "presence.updated");
+		assertThat(moved).doesNotContainKey("id");
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/PresenceUpdated", moved.get("data"))).isEmpty();
+		JsonNode cursors = json.readTree(moved.get("data")).get("cursors");
+		assertThat(cursors).hasSize(1);
+		assertThat(cursors.get(0).get("userId").asString()).isEqualTo(owner.userId);
+		assertThat(cursors.get(0).get("x").asDouble()).isEqualTo(412.5);
+
+		// 떠나면 빈 목록이 온다
+		Iterator<String> next = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
+		assertThat(json.readTree(firstNamed(next, "presence.updated").get("data")).get("cursors")).hasSize(1);
+		owner.request("POST", path, json.createObjectNode().putNull("slideId"), 204);
+		assertThat(json.readTree(firstNamed(next, "presence.updated").get("data")).get("cursors")).isEmpty();
+
+		// 팀원이 아니면 보낼 수 없고 잘못된 좌표는 입력 오류다
+		stranger.request("POST", path, position, 404);
+		JsonNode invalid = owner.request("POST", path,
+				json.createObjectNode().put("slideId", slide).put("x", 99999).put("y", 0), 422);
+		assertThat(invalid.get("error").get("code").asString()).isEqualTo("VALIDATION_FAILED");
+	}
+
+	@Test
 	void subscriptionEndsWhenEventLookupFailsSoClientCanReconnect() throws Exception {
 		Browser owner = signup("소유자");
 		String project = createProject(owner, "조회 실패");
@@ -295,6 +334,27 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		body.put("clientMutationId", UUID.randomUUID().toString());
 		body.putObject("patch").putObject("content").put("text", text);
 		return body;
+	}
+
+	// 이름이 같은 첫 신호를 받을 때까지 읽는다. 연결은 열어 둔다
+	private Map<String, String> firstNamed(Iterator<String> iterator, String name) throws Exception {
+		return CompletableFuture.supplyAsync(() -> {
+			Map<String, String> current = new LinkedHashMap<>();
+			while (iterator.hasNext()) {
+				String line = iterator.next();
+				int colon = line.indexOf(':');
+				if (line.isEmpty()) {
+					if (name.equals(current.get("event"))) {
+						return current;
+					}
+					current = new LinkedHashMap<>();
+				}
+				else if (colon > 0) {
+					current.put(line.substring(0, colon), line.substring(colon + 1).strip());
+				}
+			}
+			throw new IllegalStateException(name + " 신호를 받기 전에 연결이 끝났다");
+		}).get(10, TimeUnit.SECONDS);
 	}
 
 	// 지정한 이벤트를 받거나 연결이 끝날 때까지 읽고 연결을 닫는다
