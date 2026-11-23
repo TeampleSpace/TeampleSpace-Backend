@@ -375,6 +375,15 @@ class MaterialHttpTests extends HttpIntegrationSupport {
 				SELECT COUNT(*) FROM project_events
 				WHERE type IN ('material.comment.created', 'material.comment.deleted') AND resource_id = UUID_TO_BIN(?)
 				""").param(id).query(Integer.class).single()).isEqualTo(6);
+		// 댓글 이벤트도 공통 이벤트 형식을 따른다
+		for (String event : jdbc.sql("""
+				SELECT JSON_OBJECT('eventId', CAST(seq AS CHAR), 'projectId', BIN_TO_UUID(project_id), 'type', type,
+				       'actorId', BIN_TO_UUID(actor_id), 'occurredAt', DATE_FORMAT(occurred_at, '%Y-%m-%dT%H:%i:%s.%fZ'),
+				       'resourceId', BIN_TO_UUID(resource_id), 'payload', payload)
+				FROM project_events WHERE type LIKE 'material.comment.%' AND resource_id = UUID_TO_BIN(?)
+				""").param(id).query(String.class).list()) {
+			assertMatches("api.schema.json#/$defs/Event", json.readTree(event));
+		}
 
 		stranger.request("GET", path, null, 404);
 		stranger.request("POST", path, Map.of("body", "외부 댓글"), 404, UUID.randomUUID().toString());
