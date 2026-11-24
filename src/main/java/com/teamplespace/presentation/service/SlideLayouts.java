@@ -1291,18 +1291,24 @@ final class SlideLayouts {
 			if (n == 0) {
 				return true;
 			}
-			int each = 440 / n;
+			// 패널 안쪽 172에서 596까지 항목 높이를 실제 키워드와 설명 높이로 더한다
+			int total = 0;
 			for (Point p : s.points()) {
-				if (20 + 36 + fit(p.body(), 276, 17, 13, 4, 500, false).height(1.6) > each) {
-					return false;
-				}
+				total += 20 + fit(p.head(), 276, 22, 16, 2, 800, false).height(1.3) + 8
+						+ fit(p.body(), 276, 17, 13, 4, 500, false).height(1.6);
 			}
+			int room = 596 - 172;
+			if (total > room) {
+				return false;
+			}
+			int gap = n > 1 ? Math.min(40, (room - total) / (n - 1)) : 0;
 			rect(880, 140, 336, 472, t.surface(), 16);
+			int top = 172;
 			for (int i = 0; i < n; i++) {
-				int top = 172 + i * each;
 				rect(912, top, 32, 4, t.accent());
-				int h = tx(912, top + 20, 276, s.points().get(i).head(), 22, 16, 1, 800, t.ink(), "left", 1.3);
-				tx(912, top + 28 + h, 276, s.points().get(i).body(), 17, 13, 4, 500, t.body(), "left", 1.6);
+				int h = tx(912, top + 20, 276, s.points().get(i).head(), 22, 16, 2, 800, t.ink(), "left", 1.3);
+				int b = tx(912, top + 28 + h, 276, s.points().get(i).body(), 17, 13, 4, 500, t.body(), "left", 1.6);
+				top += 28 + h + b + gap;
 			}
 			return true;
 		}
