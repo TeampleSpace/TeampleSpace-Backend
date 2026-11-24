@@ -11,6 +11,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -165,6 +170,33 @@ public abstract class HttpIntegrationSupport {
 			return this;
 		}
 
+	}
+
+	// 지정한 이벤트를 받거나 연결이 끝날 때까지 읽고 연결을 닫는다
+	protected List<Map<String, String>> messages(HttpResponse<Stream<String>> response, String lastId) throws Exception {
+		try (Stream<String> lines = response.body()) {
+			return CompletableFuture.supplyAsync(() -> {
+				List<Map<String, String>> messages = new ArrayList<>();
+				Map<String, String> current = new LinkedHashMap<>();
+				var iterator = lines.iterator();
+				boolean done = false;
+				while (!done && iterator.hasNext()) {
+					String line = iterator.next();
+					int colon = line.indexOf(':');
+					if (line.isEmpty()) {
+						if (current.containsKey("event")) {
+							messages.add(current);
+							done = current.get("id") != null && current.get("id").equals(lastId);
+						}
+						current = new LinkedHashMap<>();
+					}
+					else if (colon > 0) {
+						current.put(line.substring(0, colon), line.substring(colon + 1).strip());
+					}
+				}
+				return messages;
+			}).get(10, TimeUnit.SECONDS);
+		}
 	}
 
 	protected Browser signup(String name) throws Exception {

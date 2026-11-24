@@ -3,10 +3,12 @@ package com.teamplespace.presentation.controller;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,7 @@ import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
 import com.teamplespace.platform.security.Actor;
 import com.teamplespace.platform.web.RequestIdFilter;
+import com.teamplespace.presentation.service.DocumentCommands;
 import com.teamplespace.presentation.service.ElementPatchService;
 import com.teamplespace.presentation.service.PresentationSnapshots;
 import com.teamplespace.presentation.service.SamplePresentations;
@@ -29,7 +32,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
-// 슬라이드 편집 화면이 쓰는 저장, 동기화 스냅샷, 이벤트 구독 경로
+// 슬라이드 편집 화면이 쓰는 저장, 구조 변경, 동기화 스냅샷, 이벤트 구독 경로
 @RestController
 @RequestMapping("/v1")
 public class EditorController {
@@ -44,6 +47,7 @@ public class EditorController {
 
 	private final SamplePresentations samples;
 
+	private final DocumentCommands commands;
 	private final Presence presence;
 
 	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
@@ -51,9 +55,10 @@ public class EditorController {
 	}
 
 	public EditorController(AuthService auth, ElementPatchService patches, PresentationSnapshots snapshots,
-			EventStreams streams, SamplePresentations samples, Presence presence) {
+			EventStreams streams, SamplePresentations samples, Presence presence, DocumentCommands commands) {
 		this.auth = auth;
 		this.patches = patches;
+		this.commands = commands;
 		this.snapshots = snapshots;
 		this.streams = streams;
 		this.samples = samples;
@@ -65,13 +70,38 @@ public class EditorController {
 			@RequestBody JsonNode body, @RequestHeader(name = "Idempotency-Key", required = false) String key,
 			HttpServletRequest request) {
 		ElementPatchService.Result result = patches.patch(actor(request), slideId, elementId, key, body);
-		JsonNode response = result.body();
-		if (result.status() >= 400) {
-			// 멱등 기록에 남긴 거절 본문에는 요청 식별자가 없다
-			response = ((ObjectNode) response).put("requestId",
-					String.valueOf(request.getAttribute(RequestIdFilter.ATTRIBUTE)));
-		}
-		return ResponseEntity.status(result.status()).body(response);
+		return respond(result.status(), result.body(), request);
+	}
+
+	@PostMapping("/presentations/{presentationId}/slides")
+	ResponseEntity<JsonNode> createSlide(@PathVariable UUID presentationId, @RequestBody JsonNode body,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return respond(commands.createSlide(actor(request), presentationId, key, body), request);
+	}
+
+	@DeleteMapping("/slides/{slideId}")
+	ResponseEntity<JsonNode> deleteSlide(@PathVariable UUID slideId, @RequestBody JsonNode body,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return respond(commands.deleteSlide(actor(request), slideId, key, body), request);
+	}
+
+	@PutMapping("/presentations/{presentationId}/slide-order")
+	ResponseEntity<JsonNode> reorderSlides(@PathVariable UUID presentationId, @RequestBody JsonNode body,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return respond(commands.reorderSlides(actor(request), presentationId, key, body), request);
+	}
+
+	@PostMapping("/slides/{slideId}/elements")
+	ResponseEntity<JsonNode> createElement(@PathVariable UUID slideId, @RequestBody JsonNode body,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return respond(commands.createElement(actor(request), slideId, key, body), request);
+	}
+
+	@DeleteMapping("/slides/{slideId}/elements/{elementId}")
+	ResponseEntity<JsonNode> deleteElement(@PathVariable UUID slideId, @PathVariable UUID elementId,
+			@RequestBody JsonNode body, @RequestHeader(name = "Idempotency-Key", required = false) String key,
+			HttpServletRequest request) {
+		return respond(commands.deleteElement(actor(request), slideId, elementId, key, body), request);
 	}
 
 	// 편집 화면용 묶음만 만든다. 다른 범위는 해당 화면을 만들 때 더한다
@@ -103,6 +133,18 @@ public class EditorController {
 	ResponseEntity<Void> sample(@PathVariable UUID projectId, HttpServletRequest request) {
 		samples.create(actor(request).userId(), projectId);
 		return ResponseEntity.noContent().build();
+	}
+
+	private ResponseEntity<JsonNode> respond(DocumentCommands.Result result, HttpServletRequest request) {
+		return respond(result.status(), result.body(), request);
+	}
+
+	private ResponseEntity<JsonNode> respond(int status, JsonNode body, HttpServletRequest request) {
+		if (status >= 400) {
+			// 멱등 기록에 남긴 거절 본문에는 요청 식별자가 없다
+			((ObjectNode) body).put("requestId", String.valueOf(request.getAttribute(RequestIdFilter.ATTRIBUTE)));
+		}
+		return ResponseEntity.status(status).body(body);
 	}
 
 	// ponytail: 로그인 세션을 편집 세션으로 써서 같은 로그인의 여러 탭이 변경 묶음을 서로 닫을 수 있다
