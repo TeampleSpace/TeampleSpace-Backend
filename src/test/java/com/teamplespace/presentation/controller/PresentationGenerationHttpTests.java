@@ -223,11 +223,15 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		JsonNode slides = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
 			.get("slides");
 		assertThat(texts(slides.get(1))).contains("출처: 첫 줄 둘 셋 넷");
+		// 템플릿 없이 만들면 제공자가 고른 스위스 계열에 프로젝트 글꼴을 쓰고, 흰 대표색은 보이게 진하게 바꾼다
 		JsonNode cover = slides.get(0).get("elements");
 		assertThat(cover.get(0).get("style").get("fill").asString()).isEqualTo("#FFFFFF");
-		assertThat(cover.get(1).get("style").get("fill").asString()).isEqualTo("#1F2933");
-		assertThat(cover.get(2).get("style").get("color").asString()).isEqualTo("#1F2933");
-		assertThat(cover.get(2).get("style").get("fontFamily").asString()).isEqualTo("ProjectFont-" + fontId);
+		assertThat(cover.get(1).get("style").get("fill").asString()).isNotEqualTo("#FFFFFF");
+		slides.forEach(slide -> slide.get("elements").forEach(element -> {
+			if (element.get("type").asString().equals("text")) {
+				assertThat(element.get("style").get("fontFamily").asString()).isEqualTo("ProjectFont-" + fontId);
+			}
+		}));
 	}
 
 	private Map<String, Object> request(long outline, long design, String source) {
@@ -302,17 +306,18 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 				http.sendResponseHeaders(503, -1);
 				return;
 			}
-			var deck = PROVIDER_JSON.createObjectNode().put("title", "생성한 발표 제목").put("subtitle", "생성한 소개 문장");
+			var deck = PROVIDER_JSON.createObjectNode().put("title", "생성한 발표 제목").put("subtitle", "생성한 소개 문장")
+				.put("style", "swiss");
 			var slides = deck.putArray("slides");
 			for (int index = 1; index <= slideCount.get(); index++) {
 				var slide = slides.addObject().put("layout", index % 2 == 1 ? "cards" : "compare")
-					.put("title", "항목 " + index).put("message", "핵심 문장");
+					.put("title", "항목 " + index).put("message", "핵심 문장").put("figure", "");
 				var points = slide.putArray("points");
-				points.addObject().put("head", "첫째 요점").put("body", "첫째 문장");
-				points.addObject().put("head", "둘째 요점").put("body", "둘째 문장");
+				points.addObject().put("head", "첫째 요점").put("body", "첫째 문장").put("figure", "312명");
+				points.addObject().put("head", "둘째 요점").put("body", "둘째 문장").put("figure", "");
 			}
-			deck.putObject("closing").put("layout", "list").put("title", "정리").put("message", "")
-				.putArray("points").addObject().put("head", "마무리").put("body", "마무리 문장");
+			deck.putObject("closing").put("layout", "list").put("title", "정리").put("message", "").put("figure", "")
+				.putArray("points").addObject().put("head", "마무리").put("body", "마무리 문장").put("figure", "");
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			response.putArray("output").addObject().put("type", "message").putArray("content")
 				.addObject().put("type", "output_text").put("text", PROVIDER_JSON.writeValueAsString(deck));
