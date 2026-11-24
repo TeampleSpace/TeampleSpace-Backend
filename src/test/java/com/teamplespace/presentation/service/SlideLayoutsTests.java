@@ -261,9 +261,13 @@ class SlideLayoutsTests {
 		for (int index = 0; index < layouts.length; index++) {
 			List<Point> points = new ArrayList<>();
 			for (int count = 0; count < counts[index]; count++) {
-				points.add(new Point(head, body, ""));
+				points.add(new Point(head, body, "월평균삼백이십오명"));
 			}
 			sections.add(new Section(layouts[index], "다".repeat(SlideLayouts.SLIDE_TITLE_MAX), "짧은 핵심 문장", "", points));
+			// 근거 두 개짜리 단계와 카드도 넣어 원과 알약 안의 긴 수치를 본다
+			sections.add(new Section(layouts[index], "단계 " + index, "", "", List.of(
+					new Point("짧은 키워드", "짧은 설명", "월평균삼백이십오명"), new Point("둘째", "설명", "2학기"),
+					new Point("셋째", "설명", "3곳"))));
 		}
 		return new Deck("라".repeat(SlideLayouts.DECK_TITLE_MAX), "마".repeat(SlideLayouts.SUBTITLE_MAX), "focus", sections,
 				new Section("list", "정리", "", "", List.of(new Point(head, body, ""), new Point(head, body, ""))));
