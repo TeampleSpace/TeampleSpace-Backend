@@ -24,6 +24,7 @@ import com.teamplespace.platform.idempotency.IdempotencyStore;
 import com.teamplespace.platform.json.CanonicalJson;
 import com.teamplespace.presentation.infra.OpenAiPresentationClient;
 import com.teamplespace.presentation.service.SlideLayouts.Deck;
+import com.teamplespace.presentation.service.SlideLayouts.Point;
 import com.teamplespace.presentation.service.SlideLayouts.Section;
 import com.teamplespace.presentation.service.SlideLayouts.Slide;
 import com.teamplespace.presentation.service.SlideLayouts.Theme;
@@ -59,7 +60,7 @@ public class PresentationGeneration implements JobHandler {
 
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
-	private static final String PROMPT_VERSION = "presentation-v1";
+	private static final String PROMPT_VERSION = "presentation-v2";
 	private static final Set<String> REQUEST_FIELDS = Set.of("outlineVersion", "designVersion", "sourceIds");
 	private static final Pattern COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
 	private static final String FONT = "Pretendard";
@@ -313,22 +314,27 @@ public class PresentationGeneration implements JobHandler {
 				rs.getString("title"), rs.getString("body"))).list();
 	}
 
-	// 템플릿은 미리보기의 배경색과 제목색을, 직접 입력은 흰 배경과 대표색을 쓴다
+	// 템플릿은 미리보기의 배경색, 제목색과 템플릿별 강조색을, 직접 입력은 흰 배경과 대표색을 쓴다
 	private Theme theme(DesignService.Settings design) {
 		if ("template".equals(design.mode())) {
 			JsonNode template = jdbc.sql("""
-					SELECT JSON_OBJECT('preview', preview, 'fonts', fonts) FROM templates WHERE id = UUID_TO_BIN(?)
+					SELECT JSON_OBJECT('key', template_key, 'preview', preview, 'fonts', fonts)
+					FROM templates WHERE id = UUID_TO_BIN(?)
 					""").param(design.templateId().toString()).query(String.class).optional()
 				.map(json::readTree).orElse(json.createObjectNode());
+			String heading = color(template.path("preview").path("headingColor"), "#212735");
+			SlideLayouts.Style style = SlideLayouts.STYLES.getOrDefault(template.path("key").asString(""),
+					new SlideLayouts.Style(heading, "rule"));
 			return Theme.of(template.path("fonts").path(0).asString(FONT),
-					color(template.path("preview").path("backgroundColor"), "#FFFFFF"),
-					color(template.path("preview").path("headingColor"), "#212735"));
+					color(template.path("preview").path("backgroundColor"), "#FFFFFF"), heading, style.accent(),
+					style.motif());
 		}
 		// 프로젝트 글꼴은 화면이 글꼴 파일을 불러와 등록하는 이름으로 적는다
 		JsonNode custom = design.custom();
 		String font = custom.hasNonNull("fontAssetId") ? "ProjectFont-" + custom.get("fontAssetId").asString()
 				: custom.path("font").asString("");
-		return Theme.of(font.isBlank() ? FONT : font, "#FFFFFF", color(custom.path("primaryColor"), "#2864E8"));
+		String primary = color(custom.path("primaryColor"), "#2864E8");
+		return Theme.of(font.isBlank() ? FONT : font, "#FFFFFF", primary, primary, "rule");
 	}
 
 	private static String color(JsonNode node, String fallback) {
@@ -370,16 +376,25 @@ public class PresentationGeneration implements JobHandler {
 	}
 
 	private static Section section(JsonNode node) {
-		OutlineInput.checkFields(node, Set.of("title", "points"), "slides");
+		OutlineInput.checkFields(node, Set.of("layout", "title", "message", "points"), "slides");
 		JsonNode points = node.path("points");
 		if (!points.isArray() || points.isEmpty() || points.size() > SlideLayouts.POINTS_MAX) {
 			throw OpenAiPresentationClient.invalidResult();
 		}
-		List<String> lines = new ArrayList<>();
+		List<Point> lines = new ArrayList<>();
 		for (JsonNode point : points) {
-			lines.add(line(point, SlideLayouts.POINT_MAX));
+			OutlineInput.checkFields(point, Set.of("head", "body"), "points");
+			lines.add(new Point(line(point.path("head"), SlideLayouts.HEAD_MAX),
+					line(point.path("body"), SlideLayouts.POINT_MAX)));
 		}
-		return new Section(line(node.path("title"), SlideLayouts.SLIDE_TITLE_MAX), List.copyOf(lines));
+		// 모르는 배치는 목록으로 그린다. 핵심 문장은 비어 있어도 된다
+		String layout = node.path("layout").asString("");
+		String message = node.path("message").asString("").strip().replaceAll("\\s+", " ");
+		if (message.codePointCount(0, message.length()) > SlideLayouts.MESSAGE_MAX) {
+			throw OpenAiPresentationClient.invalidResult();
+		}
+		return new Section(SlideLayouts.LAYOUTS.contains(layout) ? layout : "list",
+				line(node.path("title"), SlideLayouts.SLIDE_TITLE_MAX), message, List.copyOf(lines));
 	}
 
 	// 줄바꿈과 겹친 공백은 한 칸으로 줄이고 글상자에 넘치는 길이는 받지 않는다
