@@ -367,4 +367,4 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		}).get(10, TimeUnit.SECONDS);
 	}
 
-	// 지정한 이벤트를 받거나 연결이 끝날 때까지 읽고 연결을 닫는다}
+}
