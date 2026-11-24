@@ -86,7 +86,8 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		}
 		assertThat(keys).containsExactly("clean-report", "blue-focus", "editorial", "pitch-dark", "warm-story",
 				"grid-analysis", "bold-cover", "orange-pitch", "green-insight", "mono-editorial",
-				"lilac-studio", "data-briefing", "warm-seminar", "team-story");
+				"lilac-studio", "data-briefing", "warm-seminar", "team-story",
+				"burgundy-editorial", "tech-pitch", "open-campus", "field-notes");
 		assertThat(templates.get(0).get("name").asString()).isEqualTo("클린 리포트");
 		assertThat(catalog.get("allowedFonts").get(0).asString()).isEqualTo("Pretendard");
 
@@ -129,6 +130,15 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		JsonNode selected = owner.request("PUT", path, template(3, newTemplate), 200, UUID.randomUUID().toString());
 		assertThat(selected.get("templateId").asString()).isEqualTo(newTemplate.get("id").asString());
 		assertThat(owner.get(path)).isEqualTo(selected);
+		long designVersion = selected.get("version").asLong();
+		for (int position = 14; position < templates.size(); position++) {
+			JsonNode studio = templates.get(position);
+			JsonNode updated = owner.request("PUT", path, template(designVersion, studio), 200, UUID.randomUUID().toString());
+			assertThat(updated.get("templateId")).isEqualTo(studio.get("id"));
+			assertThat(updated.get("templateVersion")).isEqualTo(studio.get("version"));
+			assertThat(owner.get(path)).isEqualTo(updated);
+			designVersion = updated.get("version").asLong();
+		}
 	}
 
 	@Test
