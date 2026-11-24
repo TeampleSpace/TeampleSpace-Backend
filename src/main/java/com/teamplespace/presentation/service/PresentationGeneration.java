@@ -203,15 +203,15 @@ public class PresentationGeneration implements JobHandler {
 		}
 
 		Deck deck = parseResult(provider.generate(input.model(), json.writeValueAsString(prompt)), outline.items().size());
-		List<Slide> slides = SlideLayouts.build(json, deck, theme(input.snapshot().designSettings()), sourceLines);
 		try {
+			List<Slide> slides = SlideLayouts.build(json, deck, theme(input.snapshot().designSettings()), sourceLines);
 			slides.forEach(slide -> slide.elements()
 				.forEach(element -> ElementRules.check(element.type(), element.content(), element.style(), null)));
+			return slides;
 		}
-		catch (ApiException ex) {
+		catch (ApiException | IllegalArgumentException ex) {
 			throw OpenAiPresentationClient.invalidResult();
 		}
-		return slides;
 	}
 
 	@Override

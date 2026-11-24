@@ -87,6 +87,19 @@ class SlideLayoutsTests {
 	}
 
 	@Test
+	void fitsDenseAgendaAndListWithoutCoveringTheSource() {
+		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#212735", "#285BDD", "rule");
+		String title = String.join(" ", "가".repeat(14), "나".repeat(14), "다".repeat(10));
+		String body = String.join(" ", "가".repeat(30), "나".repeat(30), "다".repeat(28));
+		List<Point> points = java.util.Collections.nCopies(5, new Point("키워드", body));
+		Section section = new Section("list", title, "충분히 긴 설명을 보여 주는 화면", points);
+		Deck deck = new Deck("제목", "소개", java.util.Collections.nCopies(20, section), section("list", 3));
+		List<Slide> slides = SlideLayouts.build(json, deck, theme, sources(deck));
+		check("목차 제목 20개", slides.get(1));
+		check("긴 목록과 출처", slides.get(2));
+	}
+
+	@Test
 	void picksLayoutByContentAndAvoidsRepeats() {
 		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#212735", "#285BDD", "rule");
 		List<Section> sections = List.of(section("compare", 3), section("cards", 3), section("cards", 3),

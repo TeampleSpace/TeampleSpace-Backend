@@ -9,7 +9,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 // 생성한 글을 1280 x 720 캔버스의 요소로 배치한다
-// 템플릿은 색과 표지 분위기만 정하고 본문 배치는 내용에 맞춰 고른다
+// 발표 스타일과 슬라이드 내용에 맞춰 편집할 수 있는 요소를 배치한다
 final class SlideLayouts {
 
 	record Point(String head, String body) {
@@ -21,24 +21,29 @@ final class SlideLayouts {
 	record Deck(String title, String subtitle, List<Section> slides, Section closing) {
 	}
 
-	// 템플릿마다 강조색과 표지 모양. 목록에 없는 템플릿은 제목색과 기본 표지를 쓴다
+	// 템플릿마다 강조색과 레이아웃 스타일을 정한다
 	record Style(String accent, String motif) {
 	}
 
-	static final Map<String, Style> STYLES = Map.ofEntries(Map.entry("clean-report", new Style("#285BDD", "rule")),
+	static final Map<String, Style> STYLES = Map.ofEntries(
+			Map.entry("clean-report", new Style("#285BDD", "grid")),
 			Map.entry("blue-focus", new Style("#285BDD", "panel")),
-			Map.entry("orange-pitch", new Style("#F27C36", "band")),
-			Map.entry("green-insight", new Style("#2F7A5F", "blocks")),
-			Map.entry("mono-editorial", new Style("#F27C36", "rule")),
-			Map.entry("lilac-studio", new Style("#7454B4", "line")),
-			Map.entry("data-briefing", new Style("#94B6FF", "bars")),
-			Map.entry("warm-seminar", new Style("#B8633A", "rule")),
-			Map.entry("team-story", new Style("#285BDD", "blocks")),
-			Map.entry("editorial", new Style("#B4532A", "rule")),
-			Map.entry("pitch-dark", new Style("#A9CBFF", "bars")),
-			Map.entry("warm-story", new Style("#D9663F", "line")),
-			Map.entry("grid-analysis", new Style("#2E8B6E", "blocks")),
-			Map.entry("bold-cover", new Style("#232329", "band")));
+			Map.entry("orange-pitch", new Style("#F27C36", "editorial")),
+			Map.entry("green-insight", new Style("#2F7A5F", "research")),
+			Map.entry("mono-editorial", new Style("#F27C36", "grid")),
+			Map.entry("lilac-studio", new Style("#7B5CD6", "studio")),
+			Map.entry("data-briefing", new Style("#C9A227", "formal")),
+			Map.entry("warm-seminar", new Style("#B8633A", "research")),
+			Map.entry("team-story", new Style("#285BDD", "panel")),
+			Map.entry("editorial", new Style("#F26B2A", "editorial")),
+			Map.entry("pitch-dark", new Style("#7FA8FF", "technical")),
+			Map.entry("warm-story", new Style("#D9663F", "campus")),
+			Map.entry("grid-analysis", new Style("#2E8B6E", "research")),
+			Map.entry("bold-cover", new Style("#232329", "campus")),
+			Map.entry("burgundy-editorial", new Style("#682A35", "editorial")),
+			Map.entry("tech-pitch", new Style("#D5F45B", "technical")),
+			Map.entry("open-campus", new Style("#FF6B4A", "panel")),
+			Map.entry("field-notes", new Style("#254E40", "research")));
 
 	record Theme(String font, String background, String heading, String body, String accent, String accentText,
 			String onAccent, String muted, String surface, String line, String motif) {
@@ -151,35 +156,66 @@ final class SlideLayouts {
 		background(theme.background());
 		switch (theme.motif()) {
 			case "panel" -> {
-				rect(0, 0, 440, HEIGHT, theme.accent(), 0);
-				coverText(520, 680, title, subtitle);
-				ring(88, 380, 248);
-				ring(168, 452, 248);
+				rect(744, 0, 536, HEIGHT, theme.accent(), 0);
+				ellipse(855, 108, 392, Theme.mix(theme.accent(), DARK, 0.22), null);
+				ellipse(958, 382, 312, Theme.mix(theme.accent(), LIGHT, 0.17), null);
+				ellipse(816, 470, 162, null, theme.onAccent());
+				rect(72, 72, 48, 8, theme.accent(), 0);
+				coverText(72, 620, 352, title, subtitle, 70, theme.heading(), theme.muted());
 			}
-			case "band" -> {
-				rect(0, 168, WIDTH, 384, theme.accent(), 0);
-				Fit fit = fit(title, INNER, 76, 44, 3, true);
-				int height = fit.height(1.2);
-				text(MARGIN, 168 + (384 - height) / 2, INNER, height, title, fit.size(),
-						800, theme.onAccent(), "left", 1.2);
-				Fit sub = fit(subtitle, INNER, 26, 20, 2, false);
-				text(MARGIN,
-						584, INNER, sub.height(1.4), subtitle, sub.size(), 400, theme.body(), "left", 1.4);
+			case "editorial" -> {
+				rect(64, 92, 1152, 3, theme.heading(), 0);
+				rect(64, 570, 1152, 2, theme.heading(), 0);
+				rect(64, 598, 132, 22, theme.accent(), 0);
+				coverText(64, 1152, 328, title, subtitle, 88, theme.heading(), theme.muted());
 			}
-			case "blocks" -> {
-				rect(900, 136, 260, 268, theme.accent(), 0);
-				coverText(MARGIN, 660, title, subtitle);
-				rect(772, 404, 260, 196, theme.heading(), 0);
+			case "campus" -> {
+				ellipse(758, 42, 492, theme.accent(), null);
+				ellipse(992, 422, 288, Theme.mix(theme.accent(), LIGHT, 0.35), null);
+				ellipse(750, 494, 108, null, theme.accentText());
+				rect(64, 72, 240, 44, theme.heading(), 22);
+				coverText(64, 644, 370, title, subtitle, 72, theme.heading(), theme.muted());
 			}
-			case "bars" -> {
-				rect(964, 400, 56, 200, theme.accent(), 0);
-				coverText(MARGIN, 760, title, subtitle);
-				rect(1044, 300, 56, 300, theme.accent(), 0);
-				rect(1124, 184, 56, 416, theme.accent(), 0);
+			case "technical" -> {
+				String line = Theme.mix(theme.background(), theme.heading(), 0.12);
+				for (int x = 80; x < WIDTH; x += 80) {
+					rect(x, 0, 1, HEIGHT, line, 0);
+				}
+				for (int y = 80; y < HEIGHT; y += 80) {
+					rect(0, y, WIDTH, 1, line, 0);
+				}
+				rect(64, 94, 108, 5, theme.accent(), 0);
+				rect(64, 606, 1152, 2, theme.accent(), 0);
+				coverText(64, 1120, 348, title, subtitle, 76, theme.heading(), theme.muted());
 			}
-			case "line" -> {
-				rect(MARGIN, 80, 8, 560, theme.accent(), 0);
-				coverText(MARGIN + 64, INNER - 64, title, subtitle);
+			case "research" -> {
+				ellipse(792, 168, 480, theme.accent(), null);
+				ellipse(978, 36, 280, Theme.mix(theme.accent(), theme.background(), 0.42), null);
+				rect(872, 272, 262, 404, theme.surface(), 131);
+				ellipse(748, 526, 122, null, theme.accent());
+				ellipse(72, 90, 20, theme.accent(), null);
+				coverText(72, 640, 352, title, subtitle, 70, theme.heading(), theme.muted());
+			}
+			case "grid" -> {
+				rect(48, 48, 120, 120, theme.accent(), 0);
+				rect(48, 192, 1184, 2, theme.heading(), 0);
+				rect(48, 606, 1184, 2, theme.heading(), 0);
+				coverText(48, 1184, 402, title, subtitle, 82, theme.heading(), theme.muted());
+			}
+			case "studio" -> {
+				rect(48, 48, 760, 624, theme.accent(), 32);
+				rect(832, 48, 400, 340, theme.surface(), 28);
+				rect(832, 412, 400, 260, theme.surface(), 28);
+				ellipse(928, 96, 204, Theme.mix(theme.accent(), theme.background(), 0.37), null);
+				rect(928, 498, 204, 12, theme.accent(), 6);
+				coverText(96, 664, 365, title, subtitle, 68, theme.onAccent(), theme.onAccent());
+			}
+			case "formal" -> {
+				rect(0, 0, WIDTH, 556, "#0F2A4A", 0);
+				rect(0, 556, WIDTH, 4, "#C9A227", 0);
+				rect(0, 560, WIDTH, 160, "#FFFFFF", 0);
+				rect(64, 120, 80, 6, "#C9A227", 0);
+				coverText(64, 1120, 316, title, subtitle, 68, "#FFFFFF", "#B9C6D8");
 			}
 			default -> {
 				Fit head = fit(title, INNER, 76, 40, 3, true);
@@ -198,19 +234,21 @@ final class SlideLayouts {
 	}
 
 	// 제목과 소개를 세로 가운데에 놓는다
-	private void coverText(int x, int width, String title, String subtitle) {
-		Fit head = fit(title, width, 76, 40, 3, true);
+	private void coverText(int x, int width, int center, String title, String subtitle, int size,
+			String heading, String muted) {
+		Fit head = fit(title, width, size, 40, 3, true);
 		Fit sub = fit(subtitle, width, 26, 20, 2, false);
-		int top = (HEIGHT - head.height(1.22) - 32 - sub.height(1.45)) / 2 - 12;
+		int top = center - (head.height(1.22) + 32 + sub.height(1.45)) / 2;
 		text(x, top, width, head.height(1.22), title, head.size(),
-				800, theme.heading(), "left", 1.22);
+				800, heading, "left", 1.22);
 		text(x, top + head.height(1.22) + 32, width, sub.height(1.45), subtitle, sub.size(),
-				400, theme.muted(), "left",
+				400, muted, "left",
 				1.45);
 	}
 
-	private void ring(int x, int y, int size) {
-		ObjectNode style = json.createObjectNode().putNull("fill").put("stroke", theme.onAccent()).put("strokeWidth", 2);
+	private void ellipse(int x, int y, int size, String fill, String stroke) {
+		ObjectNode style = json.createObjectNode().put("fill", fill).put("stroke", stroke)
+			.put("strokeWidth", stroke == null ? 0 : 2);
 		out.add(new Element("shape", x, y, size, size, json.createObjectNode().put("shape", "ellipse"), style));
 	}
 
@@ -219,12 +257,15 @@ final class SlideLayouts {
 	private Slide agenda(List<String> titles) {
 		out = new ArrayList<>();
 		background(theme.background());
-		text(MARGIN, 96, 360, 26, "CONTENTS", 19, 700, theme.accentText(), "left", 1.3);
-		text(MARGIN, 128, 360, 72, "목차", 56, 800, theme.heading(), "left", 1.25);
-		rect(MARGIN, 220, 64, 6, theme.accent(), 0);
-		if ("panel".equals(theme.motif()) || "line".equals(theme.motif())) {
-			rect(0, 0, 16, HEIGHT, theme.accent(), 0);
+		boolean panel = "panel".equals(theme.motif()) || "studio".equals(theme.motif());
+		String titleColor = panel ? theme.onAccent() : theme.heading();
+		if (panel) {
+			rect(0, 0, 440, HEIGHT, theme.accent(), 0);
+			ellipse(24, 440, 250, Theme.mix(theme.accent(), titleColor, 0.14), null);
 		}
+		text(MARGIN, 96, 360, 26, "CONTENTS", 19, 700, panel ? titleColor : theme.accentText(), "left", 1.3);
+		text(MARGIN, 128, 360, 72, "목차", 56, 800, titleColor, "left", 1.25);
+		rect(MARGIN, 220, 64, 6, panel ? titleColor : theme.accent(), 0);
 
 		int columns = titles.size() > 6 ? 2 : 1;
 		int rows = (titles.size() + columns - 1) / columns;
@@ -237,6 +278,9 @@ final class SlideLayouts {
 			int x = left + index / rows * (columnWidth + 40);
 			int y = top + index % rows * rowHeight;
 			Fit fit = fit(titles.get(index), columnWidth - 56, columns == 1 ? 24 : 20, 14, 2, true);
+			if (fit.height(1.3) > rowHeight - 4) {
+				fit = fit(titles.get(index), columnWidth - 56, 13, 12, 2, true);
+			}
 			int textTop = y + (rowHeight - fit.height(1.3)) / 2;
 			text(x, y + (rowHeight - 30) / 2, 48, 30, two(index + 1), number, 700, theme.accentText(), "left", 1.3);
 			text(x + 56, textTop, columnWidth - 56, fit.height(1.3), titles.get(index), fit.size(),
@@ -265,13 +309,10 @@ final class SlideLayouts {
 				return new Slide(layout, out);
 			}
 		}
-		// 다 넘치면 핵심 문장을 빼고 목록으로 그린다
-		for (boolean force : new boolean[] { false, true }) {
-			out = new ArrayList<>();
-			background(theme.background());
-			if (list(section, number, false, force)) {
-				break;
-			}
+		out = new ArrayList<>();
+		background(theme.background());
+		if (!list(section, number, false, true)) {
+			throw new IllegalArgumentException("본문을 슬라이드 안에 배치할 수 없습니다");
 		}
 		footer(source, page);
 		return new Slide("list", out);
@@ -305,7 +346,14 @@ final class SlideLayouts {
 	// 번호, 제목, 핵심 문장을 놓고 본문이 시작할 위치를 돌려준다
 	private int header(Section section, int number, boolean message) {
 		text(MARGIN, 52, 48, 26, two(number), 19, 700, theme.accentText(), "left", 1.3);
-		rect(MARGIN + 36, 62, 28, 3, theme.accent(), 0);
+		switch (theme.motif()) {
+			case "editorial", "grid" -> rect(MARGIN, 80, INNER, 2, theme.heading(), 0);
+			case "campus", "research" -> ellipse(MARGIN - 28, 56, 14, theme.accent(), null);
+			case "technical" -> rect(MARGIN - 18, 52, 4, 88, theme.accent(), 0);
+			case "studio" -> rect(MARGIN + 38, 59, 48, 8, theme.accent(), 4);
+			case "formal" -> rect(MARGIN + 42, 65, INNER - 42, 3, theme.accent(), 0);
+			default -> rect(MARGIN + 36, 62, 28, 3, theme.accent(), 0);
+		}
 		Fit title = fit(section.title(), INNER, 40, 30, 2, true);
 		text(MARGIN, 88, INNER, title.height(1.25), section.title(), title.size(),
 				700, theme.heading(), "left", 1.25);
@@ -346,7 +394,15 @@ final class SlideLayouts {
 		int height = Math.max(needed, Math.min(BOTTOM - top, 340));
 		for (int index = 0; index < count; index++) {
 			int x = MARGIN + index * (width + gap);
-			rect(x, top, width, height, theme.surface(), 20);
+			int radius = switch (theme.motif()) {
+				case "editorial", "grid", "formal" -> 0;
+				case "campus", "studio" -> 28;
+				default -> 20;
+			};
+			rect(x, top, width, height, theme.surface(), radius);
+			if ("panel".equals(theme.motif()) || "technical".equals(theme.motif())) {
+				rect(x, top, width, 4, theme.accent(), 0);
+			}
 			text(x + pad, top + pad, inner, 40, two(index + 1), 32, 800, theme.accentText(), "left", 1.2);
 			int y = top + height - pad - tallest - 14;
 			Fit head = heads.get(index);
@@ -361,8 +417,8 @@ final class SlideLayouts {
 		return true;
 	}
 
-	// 번호, 키워드, 설명을 한 줄씩 놓는 표 형식. force면 넘쳐도 가장 작은 글자로 배치한다
-	private boolean list(Section section, int number, boolean message, boolean force) {
+	// 번호, 키워드, 설명을 한 줄씩 놓는 표 형식
+	private boolean list(Section section, int number, boolean message, boolean compact) {
 		int top = header(section, number, message);
 		List<Point> points = section.points();
 		int[][] sizes = { { 24, 20 }, { 22, 18 }, { 20, 16 }, { 18, 15 } };
@@ -381,10 +437,9 @@ final class SlideLayouts {
 			}
 			int space = BOTTOM - top - content;
 			int pad = Math.min(36, space / (points.size() * 2));
-			if (pad < 12 && !(force && attempt == sizes.length - 1)) {
+			if (pad < (compact ? 6 : 12)) {
 				continue;
 			}
-			pad = Math.max(pad, 12);
 			int y = top;
 			rect(MARGIN, y, INNER, 2, theme.heading(), 0);
 			for (int index = 0; index < points.size(); index++) {
