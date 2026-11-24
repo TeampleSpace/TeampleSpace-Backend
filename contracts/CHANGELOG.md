@@ -5,6 +5,11 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-24 발표 디자인 여덟 가지의 본문 배치
+
+- 발표 생성 고정 입력의 `promptVersion`을 `presentation-v3`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
+- 텍스트 요소의 `fontFamily`에 `Gmarket Sans TTF`가 올 수 있다. 화면은 이 이름으로 등록한 글꼴로 그린다
+
 ## 2026-11-24 생성 발표 자료의 배치 개선
 
 - 발표 생성 고정 입력의 `promptVersion`을 `presentation-v2`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
