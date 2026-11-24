@@ -48,11 +48,13 @@ class SlideLayoutsTests {
 		Files.createDirectories(folder);
 		List<String> problems = new ArrayList<>();
 		for (var theme : themes().entrySet()) {
-			for (var deck : Map.of("sample", sample(), "longest", longest(), "few", few()).entrySet()) {
+			for (var deck : Map.of("sample", sample(), "longest", longest(), "few", few(), "unspaced", unspaced())
+				.entrySet()) {
 				List<Slide> slides = SlideLayouts.build(json, deck.getValue(), theme.getValue(), sources(deck.getValue()));
 				for (int index = 0; index < slides.size(); index++) {
-					check(theme.getKey() + " " + deck.getKey() + " " + index + " " + slides.get(index).layout(),
-							slides.get(index), problems);
+					String name = theme.getKey() + " " + deck.getKey() + " " + index + " " + slides.get(index).layout();
+					check(name, slides.get(index), problems);
+					footer(name, slides, index, deck.getValue(), problems);
 				}
 				Files.writeString(folder.resolve(theme.getKey() + "-" + deck.getKey() + ".json"),
 						json.writeValueAsString(slides));
@@ -155,6 +157,23 @@ class SlideLayoutsTests {
 		}
 	}
 
+	// 본문 슬라이드는 모두 쪽 번호를 적고 연결된 자료가 있으면 출처도 적는다
+	private static void footer(String name, List<Slide> slides, int index, Deck deck, List<String> problems) {
+		int first = slides.size() - deck.slides().size() - 1;
+		if (index < first || index == slides.size() - 1) {
+			return;
+		}
+		List<String> texts = slides.get(index).elements().stream().filter(e -> e.type().equals("text"))
+			.map(e -> e.content().get("text").asString()).toList();
+		if (!texts.contains(String.format("%02d", index + 1))) {
+			problems.add(name + " 쪽 번호 없음");
+		}
+		String source = sources(deck).get(index - first);
+		if (source != null && !texts.contains(source)) {
+			problems.add(name + " 출처 없음");
+		}
+	}
+
 	// 글상자 첫 글자 아래에 깔린 가장 위의 채운 도형. 1px 선과 격자는 제외한다
 	private static Element below(List<Element> elements, int index) {
 		Element text = elements.get(index);
@@ -230,6 +249,24 @@ class SlideLayoutsTests {
 						point("문제 확인", "일회용 컵이 교내 쓰레기의 큰 부분을 차지합니다"),
 						point("해결 방향", "공용 다회용 컵과 회수 체계를 시범 도입합니다"),
 						point("다음 단계", "학생회와 함께 시범 운영 계획을 확정합니다"))));
+	}
+
+	// 띄어쓰기 없는 가장 긴 키워드와 설명
+	private static Deck unspaced() {
+		String head = "가".repeat(SlideLayouts.HEAD_MAX);
+		String body = "나".repeat(SlideLayouts.POINT_MAX);
+		List<Section> sections = new ArrayList<>();
+		String[] layouts = { "statement", "cards", "compare", "process", "list" };
+		int[] counts = { 3, 4, 2, 5, 5 };
+		for (int index = 0; index < layouts.length; index++) {
+			List<Point> points = new ArrayList<>();
+			for (int count = 0; count < counts[index]; count++) {
+				points.add(new Point(head, body, ""));
+			}
+			sections.add(new Section(layouts[index], "다".repeat(SlideLayouts.SLIDE_TITLE_MAX), "짧은 핵심 문장", "", points));
+		}
+		return new Deck("라".repeat(SlideLayouts.DECK_TITLE_MAX), "마".repeat(SlideLayouts.SUBTITLE_MAX), "focus", sections,
+				new Section("list", "정리", "", "", List.of(new Point(head, body, ""), new Point(head, body, ""))));
 	}
 
 	// 구성 항목이 두 개라 목차가 없고 핵심 문장과 수치가 비어 있는 발표
