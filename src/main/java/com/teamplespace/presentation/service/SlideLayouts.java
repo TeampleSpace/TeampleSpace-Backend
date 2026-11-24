@@ -2,31 +2,94 @@ package com.teamplespace.presentation.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
 
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-// 생성한 글을 1280 x 720 캔버스의 요소로 배치한다. 글자 수 상한은 각 글상자에 두 줄로 들어가는 길이다
+// 생성한 글을 1280 x 720 캔버스의 요소로 배치한다
+// 발표 스타일과 슬라이드 내용에 맞춰 편집할 수 있는 요소를 배치한다
 final class SlideLayouts {
 
-	record Section(String title, List<String> points) {
+	record Point(String head, String body) {
+	}
+
+	record Section(String layout, String title, String message, List<Point> points) {
 	}
 
 	record Deck(String title, String subtitle, List<Section> slides, Section closing) {
 	}
 
-	record Theme(String font, String background, String heading, String body) {
+	// 템플릿마다 강조색과 레이아웃 스타일을 정한다
+	record Style(String accent, String motif) {
+	}
 
-		// 본문은 배경과 대비가 큰 색을 쓰고 제목색이 배경과 3:1 대비가 안 되면 본문색으로 바꾼다
-		static Theme of(String font, String background, String heading) {
-			String body = contrast(background, LIGHT) >= contrast(background, DARK) ? LIGHT : DARK;
-			return new Theme(font, background, contrast(background, heading) < 3 ? body : heading, body);
+	static final Map<String, Style> STYLES = Map.ofEntries(
+			Map.entry("clean-report", new Style("#285BDD", "grid")),
+			Map.entry("blue-focus", new Style("#285BDD", "panel")),
+			Map.entry("orange-pitch", new Style("#F27C36", "editorial")),
+			Map.entry("green-insight", new Style("#2F7A5F", "research")),
+			Map.entry("mono-editorial", new Style("#F27C36", "grid")),
+			Map.entry("lilac-studio", new Style("#7B5CD6", "studio")),
+			Map.entry("data-briefing", new Style("#C9A227", "formal")),
+			Map.entry("warm-seminar", new Style("#B8633A", "research")),
+			Map.entry("team-story", new Style("#285BDD", "panel")),
+			Map.entry("editorial", new Style("#F26B2A", "editorial")),
+			Map.entry("pitch-dark", new Style("#7FA8FF", "technical")),
+			Map.entry("warm-story", new Style("#D9663F", "campus")),
+			Map.entry("grid-analysis", new Style("#2E8B6E", "research")),
+			Map.entry("bold-cover", new Style("#232329", "campus")),
+			Map.entry("burgundy-editorial", new Style("#682A35", "editorial")),
+			Map.entry("tech-pitch", new Style("#D5F45B", "technical")),
+			Map.entry("open-campus", new Style("#FF6B4A", "panel")),
+			Map.entry("field-notes", new Style("#254E40", "research")));
+
+	record Theme(String font, String background, String heading, String body, String accent, String accentText,
+			String onAccent, String muted, String surface, String line, String motif) {
+
+		// 제목색이 배경과 3:1 대비가 안 되면 본문색을 쓴다. 강조색도 같은 기준으로 글자에 쓸지 정한다
+		static Theme of(String font, String background, String heading, String accent, String motif) {
+			String body = readable(background);
+			String title = contrast(background, heading) < 3 ? body : heading;
+			String mark = accent == null || contrast(background, accent) < 1.6 ? title : accent;
+			String markText = textOn(background, mark);
+			String muted = mix(body, background, 0.3);
+			if (contrast(background, muted) < 4.5) {
+				muted = body;
+			}
+			return new Theme(font, background, title, body, mark, markText, readable(mark), muted,
+					mix(background, body, 0.06), mix(background, body, 0.16), motif == null ? "rule" : motif);
+		}
+
+		static String readable(String background) {
+			String ink = contrast(background, LIGHT) >= contrast(background, DARK) ? LIGHT : DARK;
+			if (contrast(background, ink) >= 4.5) {
+				return ink;
+			}
+			return contrast(background, "#FFFFFF") >= 4.5 ? "#FFFFFF" : "#000000";
+		}
+
+		static String textOn(String background, String color) {
+			return contrast(background, color) >= 4.5 ? color : readable(background);
 		}
 
 		static double contrast(String first, String second) {
 			double a = luminance(first);
 			double b = luminance(second);
 			return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+		}
+
+		static String mix(String from, String to, double amount) {
+			int a = Integer.parseInt(from.substring(1), 16);
+			int b = Integer.parseInt(to.substring(1), 16);
+			int rgb = 0;
+			for (int shift = 16; shift >= 0; shift -= 8) {
+				int x = a >> shift & 0xFF;
+				int y = b >> shift & 0xFF;
+				rgb |= (int) Math.round(x + (y - x) * amount) << shift;
+			}
+			return String.format("#%06X", rgb);
 		}
 
 		private static double luminance(String hex) {
@@ -54,15 +117,21 @@ final class SlideLayouts {
 	static final int DECK_TITLE_MAX = 40;
 	static final int SUBTITLE_MAX = 80;
 	static final int SLIDE_TITLE_MAX = 40;
+	static final int MESSAGE_MAX = 80;
+	static final int HEAD_MAX = 24;
 	static final int POINT_MAX = 90;
 	static final int POINTS_MAX = 5;
 
+	static final List<String> LAYOUTS = List.of("cards", "list", "process", "compare", "statement");
+
 	private static final int MARGIN = 80;
-	private static final int POINT_TOP = 206;
-	private static final int POINT_GAP = 84;
+	private static final int INNER = WIDTH - MARGIN * 2;
+	private static final int BOTTOM = 628;
+	private static final int FOOTER = 668;
 
 	private final ObjectMapper json;
 	private final Theme theme;
+	private List<Element> out;
 
 	private SlideLayouts(ObjectMapper json, Theme theme) {
 		this.json = json;
@@ -74,48 +143,657 @@ final class SlideLayouts {
 		var layouts = new SlideLayouts(json, theme);
 		List<Slide> slides = new ArrayList<>();
 		slides.add(layouts.cover(deck.title(), deck.subtitle()));
-		for (int index = 0; index < deck.slides().size(); index++) {
-			slides.add(layouts.content("content", deck.slides().get(index), sources.get(index)));
+		if (deck.slides().size() >= 3) {
+			slides.add(layouts.agenda(deck.slides().stream().map(Section::title).toList()));
 		}
-		slides.add(layouts.content("summary", deck.closing(), null));
+		String previous = null;
+		for (int index = 0; index < deck.slides().size(); index++) {
+			Slide slide = layouts.content(deck.slides().get(index), index + 1, sources.get(index), slides.size() + 1,
+					previous);
+			previous = slide.layout();
+			slides.add(slide);
+		}
+		slides.add(layouts.closing(deck.closing()));
 		return slides;
 	}
 
+	// 표지
+
 	private Slide cover(String title, String subtitle) {
-		List<Element> elements = new ArrayList<>();
-		elements.add(rect(0, 0, WIDTH, HEIGHT, theme.background()));
-		elements.add(rect(MARGIN, 232, 96, 10, theme.heading()));
-		elements.add(text(MARGIN, 268, 1120, 160, title, 56, 700, theme.heading(), 1.3));
-		elements.add(text(MARGIN, 452, 1120, 80, subtitle, 26, 400, theme.body(), 1.4));
-		return new Slide("title", elements);
+		out = new ArrayList<>();
+		background(theme.background());
+		switch (theme.motif()) {
+			case "panel" -> {
+				rect(744, 0, 536, HEIGHT, theme.accent(), 0);
+				ellipse(855, 108, 392, Theme.mix(theme.accent(), DARK, 0.22), null);
+				ellipse(958, 382, 312, Theme.mix(theme.accent(), LIGHT, 0.17), null);
+				ellipse(816, 470, 162, null, theme.onAccent());
+				rect(72, 72, 48, 8, theme.accent(), 0);
+				coverText(72, 620, 352, title, subtitle, 70, theme.heading(), theme.muted());
+			}
+			case "editorial" -> {
+				rect(64, 92, 1152, 3, theme.heading(), 0);
+				rect(64, 570, 1152, 2, theme.heading(), 0);
+				rect(64, 598, 132, 22, theme.accent(), 0);
+				coverText(64, 1152, 328, title, subtitle, 88, theme.heading(), theme.muted());
+			}
+			case "campus" -> {
+				ellipse(758, 42, 492, theme.accent(), null);
+				ellipse(992, 422, 288, Theme.mix(theme.accent(), LIGHT, 0.35), null);
+				ellipse(750, 494, 108, null, theme.accentText());
+				rect(64, 72, 240, 44, theme.heading(), 22);
+				coverText(64, 644, 370, title, subtitle, 72, theme.heading(), theme.muted());
+			}
+			case "technical" -> {
+				String line = Theme.mix(theme.background(), theme.heading(), 0.12);
+				for (int x = 80; x < WIDTH; x += 80) {
+					rect(x, 0, 1, HEIGHT, line, 0);
+				}
+				for (int y = 80; y < HEIGHT; y += 80) {
+					rect(0, y, WIDTH, 1, line, 0);
+				}
+				rect(64, 94, 108, 5, theme.accent(), 0);
+				rect(64, 606, 1152, 2, theme.accent(), 0);
+				coverText(64, 1120, 348, title, subtitle, 76, theme.heading(), theme.muted());
+			}
+			case "research" -> {
+				ellipse(792, 168, 480, theme.accent(), null);
+				ellipse(978, 36, 280, Theme.mix(theme.accent(), theme.background(), 0.42), null);
+				rect(872, 272, 262, 404, theme.surface(), 131);
+				ellipse(748, 526, 122, null, theme.accent());
+				ellipse(72, 90, 20, theme.accent(), null);
+				coverText(72, 640, 352, title, subtitle, 70, theme.heading(), theme.muted());
+			}
+			case "grid" -> {
+				rect(48, 48, 120, 120, theme.accent(), 0);
+				rect(48, 192, 1184, 2, theme.heading(), 0);
+				rect(48, 606, 1184, 2, theme.heading(), 0);
+				coverText(48, 1184, 402, title, subtitle, 82, theme.heading(), theme.muted());
+			}
+			case "studio" -> {
+				rect(48, 48, 760, 624, theme.accent(), 32);
+				rect(832, 48, 400, 340, theme.surface(), 28);
+				rect(832, 412, 400, 260, theme.surface(), 28);
+				ellipse(928, 96, 204, Theme.mix(theme.accent(), theme.background(), 0.37), null);
+				rect(928, 498, 204, 12, theme.accent(), 6);
+				coverText(96, 664, 365, title, subtitle, 68, theme.onAccent(), theme.onAccent());
+			}
+			case "formal" -> {
+				rect(0, 0, WIDTH, 556, "#0F2A4A", 0);
+				rect(0, 556, WIDTH, 4, "#C9A227", 0);
+				rect(0, 560, WIDTH, 160, "#FFFFFF", 0);
+				rect(64, 120, 80, 6, "#C9A227", 0);
+				coverText(64, 1120, 316, title, subtitle, 68, "#FFFFFF", "#B9C6D8");
+			}
+			default -> {
+				Fit head = fit(title, INNER, 76, 40, 3, true);
+				Fit sub = fit(subtitle, INNER, 26, 20, 2, false);
+				int top = (HEIGHT - head.height(1.22) - 82 - sub.height(1.45)) / 2 - 12;
+				rect(MARGIN, top - 56, 72, 8, theme.accent(), 0);
+				text(MARGIN, top, INNER, head.height(1.22), title, head.size(),
+						800, theme.heading(), "left", 1.22);
+				rect(MARGIN, top + head.height(1.22) + 40, INNER, 2, theme.line(), 0);
+				text(MARGIN, top + head.height(1.22) + 82, INNER, sub.height(1.45), subtitle, sub.size(),
+						400, theme.muted(),
+						"left", 1.45);
+			}
+		}
+		return new Slide("title", out);
 	}
 
-	private Slide content(String layout, Section section, String source) {
-		List<Element> elements = new ArrayList<>();
-		elements.add(rect(0, 0, WIDTH, HEIGHT, theme.background()));
-		elements.add(text(MARGIN, 56, 1120, 104, section.title(), 40, 700, theme.heading(), 1.3));
-		elements.add(rect(MARGIN, 172, 1120, 3, theme.heading()));
-		for (int index = 0; index < section.points().size(); index++) {
-			int top = POINT_TOP + index * POINT_GAP;
-			elements.add(rect(88, top + 12, 10, 10, theme.heading()));
-			elements.add(text(116, top, 1084, 76, section.points().get(index), 24, 400, theme.body(), 1.45));
+	// 제목과 소개를 세로 가운데에 놓는다
+	private void coverText(int x, int width, int center, String title, String subtitle, int size,
+			String heading, String muted) {
+		Fit head = fit(title, width, size, 40, 3, true);
+		Fit sub = fit(subtitle, width, 26, 20, 2, false);
+		int top = center - (head.height(1.22) + 32 + sub.height(1.45)) / 2;
+		text(x, top, width, head.height(1.22), title, head.size(),
+				800, heading, "left", 1.22);
+		text(x, top + head.height(1.22) + 32, width, sub.height(1.45), subtitle, sub.size(),
+				400, muted, "left",
+				1.45);
+	}
+
+	private void ellipse(int x, int y, int size, String fill, String stroke) {
+		ObjectNode style = json.createObjectNode().put("fill", fill).put("stroke", stroke)
+			.put("strokeWidth", stroke == null ? 0 : 2);
+		out.add(new Element("shape", x, y, size, size, json.createObjectNode().put("shape", "ellipse"), style));
+	}
+
+	// 목차
+
+	private Slide agenda(List<String> titles) {
+		out = new ArrayList<>();
+		background(theme.background());
+		boolean panel = "panel".equals(theme.motif()) || "studio".equals(theme.motif());
+		String titleColor = panel ? theme.onAccent() : theme.heading();
+		if (panel) {
+			rect(0, 0, 440, HEIGHT, theme.accent(), 0);
+			ellipse(24, 440, 250, Theme.mix(theme.accent(), titleColor, 0.14), null);
 		}
+		text(MARGIN, 96, 360, 26, "CONTENTS", 19, 700, panel ? titleColor : theme.accentText(), "left", 1.3);
+		text(MARGIN, 128, 360, 72, "목차", 56, 800, titleColor, "left", 1.25);
+		rect(MARGIN, 220, 64, 6, panel ? titleColor : theme.accent(), 0);
+
+		int columns = titles.size() > 6 ? 2 : 1;
+		int rows = (titles.size() + columns - 1) / columns;
+		int left = columns == 1 ? 520 : 460;
+		int columnWidth = columns == 1 ? 680 : 350;
+		int rowHeight = Math.min(84, 560 / rows);
+		int top = (HEIGHT - rowHeight * rows) / 2;
+		int number = columns == 1 ? 22 : 19;
+		String itemColor = Theme.textOn(theme.background(), theme.heading());
+		for (int index = 0; index < titles.size(); index++) {
+			int x = left + index / rows * (columnWidth + 40);
+			int y = top + index % rows * rowHeight;
+			Fit fit = fit(titles.get(index), columnWidth - 56, columns == 1 ? 24 : 20, 14, 2, true);
+			if (fit.height(1.3) > rowHeight - 4) {
+				fit = fit(titles.get(index), columnWidth - 56, 13, 12, 2, true);
+			}
+			int textTop = y + (rowHeight - fit.height(1.3)) / 2;
+			text(x, y + (rowHeight - 30) / 2, 48, 30, two(index + 1), number, 700, theme.accentText(), "left", 1.3);
+			text(x + 56, textTop, columnWidth - 56, fit.height(1.3), titles.get(index), fit.size(),
+					600, itemColor, "left", 1.3);
+			rect(x, y + rowHeight - 1, columnWidth, 1, theme.line(), 0);
+		}
+		return new Slide("agenda", out);
+	}
+
+	// 본문
+
+	private Slide content(Section section, int number, String source, int page, String previous) {
+		for (String layout : candidates(section, previous)) {
+			out = new ArrayList<>();
+			background(theme.background());
+			boolean fits = switch (layout) {
+				case "cards" -> cards(section, number);
+				case "process" -> process(section, number);
+				case "compare" -> compare(section, number);
+				case "statement" -> statement(section, number);
+				default -> list(section, number, true, false);
+			};
+			if (fits) {
+				footer(source, page);
+				return new Slide(layout, out);
+			}
+		}
+		out = new ArrayList<>();
+		background(theme.background());
+		if (!list(section, number, false, true)) {
+			throw new IllegalArgumentException("본문을 슬라이드 안에 배치할 수 없습니다");
+		}
+		footer(source, page);
+		return new Slide("list", out);
+	}
+
+	// 요청한 배치를 먼저 쓰고 항목 수가 맞지 않거나 넘치면 다음 배치로 바꾼다. 같은 배치가 이어지면 카드와 목록을 번갈아 쓴다
+	private static List<String> candidates(Section section, String previous) {
+		int count = section.points().size();
+		Predicate<String> usable = layout -> switch (layout) {
+			case "cards" -> count >= 2 && count <= 4;
+			case "process" -> count >= 3 && count <= 5;
+			case "compare" -> count == 2;
+			case "statement" -> count <= 3 && !section.message().isEmpty();
+			default -> true;
+		};
+		String first = section.layout();
+		if (first.equals(previous) && first.equals("cards") && usable.test("list")) {
+			first = "list";
+		}
+		else if (first.equals(previous) && first.equals("list") && usable.test("cards")) {
+			first = "cards";
+		}
+		List<String> order = new ArrayList<>(List.of(first));
+		order.addAll(switch (first) {
+			case "compare", "statement" -> List.of("cards", "list");
+			default -> List.of("list");
+		});
+		return order.stream().distinct().filter(usable).toList();
+	}
+
+	// 번호, 제목, 핵심 문장을 놓고 본문이 시작할 위치를 돌려준다
+	private int header(Section section, int number, boolean message) {
+		text(MARGIN, 52, 48, 26, two(number), 19, 700, theme.accentText(), "left", 1.3);
+		switch (theme.motif()) {
+			case "editorial", "grid" -> rect(MARGIN, 80, INNER, 2, theme.heading(), 0);
+			case "campus", "research" -> ellipse(MARGIN - 28, 56, 14, theme.accent(), null);
+			case "technical" -> rect(MARGIN - 18, 52, 4, 88, theme.accent(), 0);
+			case "studio" -> rect(MARGIN + 38, 59, 48, 8, theme.accent(), 4);
+			case "formal" -> rect(MARGIN + 42, 65, INNER - 42, 3, theme.accent(), 0);
+			default -> rect(MARGIN + 36, 62, 28, 3, theme.accent(), 0);
+		}
+		Fit title = fit(section.title(), INNER, 40, 30, 2, true);
+		text(MARGIN, 88, INNER, title.height(1.25), section.title(), title.size(),
+				700, theme.heading(), "left", 1.25);
+		int bottom = 88 + title.height(1.25);
+		if (message && !section.message().isEmpty()) {
+			Fit sub = fit(section.message(), INNER, 22, 18, 2, false);
+			text(MARGIN, bottom + 12, INNER, sub.height(1.45), section.message(), sub.size(),
+					400, theme.muted(), "left",
+					1.45);
+			bottom += 12 + sub.height(1.45);
+		}
+		return bottom + 44;
+	}
+
+	private boolean cards(Section section, int number) {
+		int top = header(section, number, true);
+		List<Point> points = section.points();
+		int count = points.size();
+		int gap = 24;
+		int width = (INNER - gap * (count - 1)) / count;
+		int pad = count == 4 ? 28 : 36;
+		int inner = width - pad * 2;
+		List<Fit> heads = new ArrayList<>();
+		List<Fit> bodies = new ArrayList<>();
+		int tallest = 0;
+		for (Point point : points) {
+			Fit head = fit(point.head(), inner, 26, 20, 2, true);
+			Fit body = fit(point.body(), inner, 20, 16, 7, false);
+			heads.add(head);
+			bodies.add(body);
+			tallest = Math.max(tallest, head.height(1.3) + body.height(1.5));
+		}
+		// 카드는 남는 높이를 채우고 번호는 위, 글은 아래에 맞춘다
+		int needed = pad * 2 + 40 + 32 + tallest + 14;
+		if (top + needed > BOTTOM) {
+			return false;
+		}
+		int height = Math.max(needed, Math.min(BOTTOM - top, 340));
+		for (int index = 0; index < count; index++) {
+			int x = MARGIN + index * (width + gap);
+			int radius = switch (theme.motif()) {
+				case "editorial", "grid", "formal" -> 0;
+				case "campus", "studio" -> 28;
+				default -> 20;
+			};
+			rect(x, top, width, height, theme.surface(), radius);
+			if ("panel".equals(theme.motif()) || "technical".equals(theme.motif())) {
+				rect(x, top, width, 4, theme.accent(), 0);
+			}
+			text(x + pad, top + pad, inner, 40, two(index + 1), 32, 800, theme.accentText(), "left", 1.2);
+			int y = top + height - pad - tallest - 14;
+			Fit head = heads.get(index);
+			text(x + pad, y, inner, head.height(1.3), points.get(index).head(), head.size(),
+					700, Theme.textOn(theme.surface(), theme.heading()), "left", 1.3);
+			y += head.height(1.3) + 14;
+			Fit body = bodies.get(index);
+			text(x + pad, y, inner, body.height(1.5), points.get(index).body(), body.size(), 400, theme.body(), "left",
+					1.5);
+		}
+		return true;
+	}
+
+	// 번호, 키워드, 설명을 한 줄씩 놓는 표 형식
+	private boolean list(Section section, int number, boolean message, boolean compact) {
+		int top = header(section, number, message);
+		List<Point> points = section.points();
+		int[][] sizes = { { 24, 20 }, { 22, 18 }, { 20, 16 }, { 18, 15 }, { 18, 14 } };
+		for (int attempt = 0; attempt < sizes.length; attempt++) {
+			int headSize = sizes[attempt][0];
+			int bodySize = sizes[attempt][1];
+			List<Fit> heads = new ArrayList<>();
+			List<Fit> bodies = new ArrayList<>();
+			int content = 0;
+			for (Point point : points) {
+				Fit head = fit(point.head(), 300, headSize, headSize - 4, 2, true);
+				Fit body = fit(point.body(), 700, bodySize, bodySize, 4, false);
+				heads.add(head);
+				bodies.add(body);
+				content += Math.max(head.height(1.35), body.height(1.5));
+			}
+			int space = BOTTOM - top - content;
+			int pad = Math.min(36, space / (points.size() * 2));
+			if (pad < (compact ? 4 : 12)) {
+				continue;
+			}
+			int y = top;
+			rect(MARGIN, y, INNER, 2, theme.heading(), 0);
+			for (int index = 0; index < points.size(); index++) {
+				Fit head = heads.get(index);
+				Fit body = bodies.get(index);
+				int row = Math.max(head.height(1.35), body.height(1.5));
+				int line = y + pad;
+				text(MARGIN, line, 56, (int) Math.ceil(headSize * 1.35) + 4, two(index + 1), headSize,
+						700, theme.accentText(), "left", 1.35);
+				text(MARGIN + 72, line, 300, head.height(1.35), points.get(index).head(), head.size(), 700,
+						Theme.textOn(theme.background(), theme.heading()), "left", 1.35);
+				text(MARGIN + 420, line,
+						700, body.height(1.5), points.get(index).body(), body.size(), 400, theme.body(),
+						"left", 1.5);
+				y = line + row + pad;
+				if (index < points.size() - 1) {
+					rect(MARGIN, y, INNER, 1, theme.line(), 0);
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private boolean process(Section section, int number) {
+		int top = header(section, number, true);
+		List<Point> points = section.points();
+		int count = points.size();
+		int column = INNER / count;
+		int inner = column - 32;
+		int circle = 60;
+		int tallest = 0;
+		for (Point point : points) {
+			tallest = Math.max(tallest, fit(point.head(), inner, 24, 18, 2, true).height(1.3) + 12
+					+ fit(point.body(), inner, 19, 15, 6, false).height(1.5));
+		}
+		// 단계 묶음을 남는 높이의 가운데에 놓는다
+		top += Math.max(0, (BOTTOM - top - circle - 28 - tallest) / 2);
+		rect(MARGIN + column / 2, top + circle / 2 - 1, INNER - column, 2, theme.line(), 0);
+		int bottom = top;
+		for (int index = 0; index < count; index++) {
+			int center = MARGIN + column * index + column / 2;
+			ObjectNode style = json.createObjectNode().put("fill", theme.accent()).putNull("stroke").put("strokeWidth", 0);
+			out.add(new Element("shape", center - circle / 2, top, circle, circle,
+					json.createObjectNode().put("shape", "ellipse"), style));
+			text(center - circle / 2, top + 16, circle, 28, two(index + 1), 20, 700, theme.onAccent(), "center", 1.3);
+			Fit head = fit(points.get(index).head(), inner, 24, 18, 2, true);
+			int y = top + circle + 28;
+			text(center - inner / 2, y, inner, head.height(1.3), points.get(index).head(), head.size(), 700,
+					Theme.textOn(theme.background(), theme.heading()), "center", 1.3);
+			y += head.height(1.3) + 12;
+			Fit body = fit(points.get(index).body(), inner, 19, 15, 6, false);
+			text(center - inner / 2, y, inner, body.height(1.5), points.get(index).body(), body.size(),
+					400, theme.body(),
+					"center", 1.5);
+			bottom = Math.max(bottom, y + body.height(1.5));
+		}
+		return bottom <= BOTTOM;
+	}
+
+	private boolean compare(Section section, int number) {
+		int top = header(section, number, true);
+		int gap = 24;
+		int width = (INNER - gap) / 2;
+		int pad = 44;
+		int tallest = 0;
+		for (Point point : section.points()) {
+			tallest = Math.max(tallest, fit(point.head(), width - pad * 2, 32, 22, 2, true).height(1.3) + 40
+					+ fit(point.body(), width - pad * 2, 22, 17, 6, false).height(1.5));
+		}
+		if (top + tallest + pad * 2 > BOTTOM) {
+			return false;
+		}
+		int height = Math.max(tallest + pad * 2, Math.min(BOTTOM - top, 320));
+		String strong = strong();
+		String onStrong = Theme.readable(strong);
+		for (int index = 0; index < 2; index++) {
+			Point point = section.points().get(index);
+			boolean filled = index == 1;
+			int x = MARGIN + index * (width + gap);
+			String ink = filled ? onStrong : Theme.textOn(theme.surface(), theme.heading());
+			String text = filled ? onStrong : theme.body();
+			rect(x, top, width, height, filled ? strong : theme.surface(), 24);
+			Fit head = fit(point.head(), width - pad * 2, 32, 22, 2, true);
+			Fit body = fit(point.body(), width - pad * 2, 22, 17, 6, false);
+			text(x + pad, top + pad, width - pad * 2, head.height(1.3), point.head(), head.size(),
+					800, ink, "left", 1.3);
+			rect(x + pad, top + pad + head.height(1.3) + 16, 40, 4, filled ? onStrong : theme.accent(), 0);
+			text(x + pad, top + pad + head.height(1.3) + 40, width - pad * 2, body.height(1.5), point.body(), body.size(),
+					400, text, "left", 1.5);
+		}
+		return true;
+	}
+
+	// 핵심 문장을 크게 쓰고 근거를 아래에 작게 놓는다
+	private boolean statement(Section section, int number) {
+		text(MARGIN, 52, 48, 26, two(number), 19, 700, theme.accentText(), "left", 1.3);
+		Fit title = fit(section.title(), INNER - 48, 24, 20, 1, true);
+		text(MARGIN + 48, 52, INNER - 48, title.height(1.3), section.title(), title.size(), 700, theme.muted(), "left",
+				1.3);
+		Fit message = fit(section.message(), 1040, 52, 34, 3, true);
+		int y = 168;
+		rect(MARGIN, y, 72, 8, theme.accent(), 0);
+		y += 48;
+		text(MARGIN, y, 1040, message.height(1.3), section.message(), message.size(),
+				800, theme.heading(), "left", 1.3);
+		int messageBottom = y + message.height(1.3);
+
+		List<Point> points = section.points();
+		int gap = 40;
+		int width = (INNER - gap * (points.size() - 1)) / points.size();
+		int tallest = 0;
+		for (Point point : points) {
+			tallest = Math.max(tallest, 20 + fit(point.head(), width, 20, 18, 1, true).height(1.3) + 8
+					+ fit(point.body(), width, 18, 15, 4, false).height(1.5));
+		}
+		int top = BOTTOM - tallest;
+		if (top < messageBottom + 40) {
+			return false;
+		}
+		for (int index = 0; index < points.size(); index++) {
+			Point point = points.get(index);
+			int x = MARGIN + index * (width + gap);
+			rect(x, top, width, 2, theme.line(), 0);
+			Fit head = fit(point.head(), width, 20, 18, 1, true);
+			text(x, top + 20, width, head.height(1.3), point.head(), head.size(), 700, theme.accentText(), "left", 1.3);
+			Fit body = fit(point.body(), width, 18, 15, 4, false);
+			text(x, top + 20 + head.height(1.3) + 8, width, body.height(1.5), point.body(), body.size(),
+					400, theme.body(),
+					"left", 1.5);
+		}
+		return true;
+	}
+
+	private void footer(String source, int page) {
 		if (source != null) {
-			elements.add(text(MARGIN, 652, 1120, 32, source, 16, 400, theme.body(), 1.4));
+			text(MARGIN, FOOTER, 960, 22, source, 14, 400, theme.muted(), "left", 1.4);
 		}
-		return new Slide(layout, elements);
+		text(WIDTH - MARGIN - 80, FOOTER, 80, 22, two(page), 14, 700, theme.muted(), "right", 1.4);
 	}
 
-	private Element rect(int x, int y, int width, int height, String fill) {
-		ObjectNode style = json.createObjectNode().put("fill", fill).put("stroke", (String) null).put("strokeWidth", 0);
-		return new Element("shape", x, y, width, height, json.createObjectNode().put("shape", "rect"), style);
+	// 강조색으로 채운 면. 그 위 본문 글자가 잘 안 읽히면 제목색으로 채운다
+	private String strong() {
+		return Theme.contrast(theme.accent(), theme.onAccent()) >= 4.5 ? theme.accent() : theme.heading();
 	}
 
-	private Element text(int x, int y, int width, int height, String value, int size, int weight, String color,
-			double lineHeight) {
+	// 정리. 강조색 면으로 마지막 장을 구분한다
+
+	private Slide closing(Section section) {
+		out = new ArrayList<>();
+		String background = strong();
+		String ink = Theme.contrast(background, theme.background()) >= 4.5 ? theme.background()
+				: Theme.readable(background);
+		String soft = Theme.mix(ink, background, 0.22);
+		if (Theme.contrast(background, soft) < 4.5) {
+			soft = ink;
+		}
+		String mark = Theme.contrast(background, theme.accent()) >= 3 ? theme.accent() : ink;
+		String rule = Theme.mix(background, ink, 0.22);
+		background(background);
+
+		Fit title = fit(section.title(), 360, 48, 32, 3, true);
+		int left = 120;
+		text(MARGIN, left, 360, 26, "SUMMARY", 19, 700, mark, "left", 1.3);
+		text(MARGIN, left + 40,
+				360, title.height(1.25), section.title(), title.size(), 800, ink, "left", 1.25);
+		int y = left + 40 + title.height(1.25) + 28;
+		rect(MARGIN, y, 64, 6, mark, 0);
+		if (!section.message().isEmpty()) {
+			Fit message = fit(section.message(), 360, 22, 18, 4, false);
+			text(MARGIN, y + 34, 360, message.height(1.5), section.message(), message.size(), 400, soft, "left", 1.5);
+		}
+
+		List<Point> points = section.points();
+		int x = 540;
+		int width = WIDTH - MARGIN - x;
+		List<ClosingRow> rows = closingRows(points, width - 64, 24, 19);
+		int total = rows.stream().mapToInt(ClosingRow::height).sum();
+		if (total + 20 * rows.size() > HEIGHT - 40) {
+			rows = closingRows(points, width - 64, 18, 15);
+			total = rows.stream().mapToInt(ClosingRow::height).sum();
+		}
+		int pad = Math.min(28, Math.max(0, (HEIGHT - 40 - total) / (rows.size() * 2)));
+		int top = (HEIGHT - total - pad * 2 * rows.size()) / 2;
+		for (int index = 0; index < rows.size(); index++) {
+			ClosingRow point = rows.get(index);
+			Fit head = point.head();
+			Fit body = point.body();
+			int row = top + pad;
+			text(x, row, 48, 30, two(index + 1), 22, 800, mark, "left", 1.3);
+			text(x + 64, row, width - 64, head.height(1.3), point.value().head(), head.size(),
+					700, ink, "left", 1.3);
+			text(x + 64, row + head.height(1.3) + 8, width - 64, body.height(1.5), point.value().body(), body.size(),
+					400, soft, "left", 1.5);
+			top = row + point.height() + pad;
+			if (index < rows.size() - 1) {
+				rect(x, top, width, 1, rule, 0);
+			}
+		}
+		return new Slide("summary", out);
+	}
+
+	private record ClosingRow(Point value, Fit head, Fit body) {
+		int height() {
+			return head.height(1.3) + 8 + body.height(1.5);
+		}
+	}
+
+	private static List<ClosingRow> closingRows(List<Point> points, int width, int headSize, int bodySize) {
+		return points.stream().map(point -> new ClosingRow(point,
+				fit(point.head(), width, headSize, 18, 2, true),
+				fit(point.body(), width, bodySize, 15, 3, false))).toList();
+	}
+
+	// 요소
+
+	private void background(String fill) {
+		rect(0, 0, WIDTH, HEIGHT, fill, 0);
+	}
+
+	private void rect(int x, int y, int width, int height, String fill, int radius) {
+		ObjectNode style = json.createObjectNode().put("fill", fill).putNull("stroke").put("strokeWidth", 0);
+		if (radius > 0) {
+			style.put("cornerRadius", radius);
+		}
+		out.add(new Element("shape", x, y, width, height, json.createObjectNode().put("shape", "rect"), style));
+	}
+
+	private void text(int x, int y, int width, int height, String value, int size, int weight, String color,
+			String align, double lineHeight) {
+		value = broken(value, width, size, weight >= 600);
 		ObjectNode style = json.createObjectNode().put("fontFamily", theme.font()).put("fontSize", size)
-			.put("fontWeight", weight).put("color", color).put("align", "left").put("lineHeight", lineHeight);
-		return new Element("text", x, y, width, height, json.createObjectNode().put("text", value), style);
+			.put("fontWeight", weight).put("color", color).put("align", align).put("lineHeight", lineHeight);
+		out.add(new Element("text", x, y, width, height, json.createObjectNode().put("text", value), style));
+	}
+
+	private static String two(int number) {
+		return String.format("%02d", number);
+	}
+
+	// 글자 맞춤
+
+	record Fit(int size, int lines) {
+
+		int height(double lineHeight) {
+			return (int) Math.ceil(size * lineHeight * lines) + 4;
+		}
+	}
+
+	// 줄 수가 maxLines 안에 드는 가장 큰 글자 크기. 끝까지 안 맞으면 가장 작은 크기와 그때의 줄 수
+	static Fit fit(String text, int width, int maxSize, int minSize, int maxLines, boolean bold) {
+		for (int size = maxSize; size > minSize; size--) {
+			int lines = lines(text, width, size, bold);
+			if (lines <= maxLines) {
+				return new Fit(size, lines);
+			}
+		}
+		return new Fit(minSize, lines(text, width, minSize, bold));
+	}
+
+	static int lines(String text, int width, int size, boolean bold) {
+		return text.lines().mapToInt(line -> wrap(line, width, size, bold).size()).sum();
+	}
+
+	// 띄어쓰기에서 줄을 바꾸고 한 줄보다 긴 낱말만 글자 단위로 나눈다. 보는 프로그램마다 다른 폭을 감안해 4%를 남긴다
+	static List<String> wrap(String text, int width, int size, boolean bold) {
+		double limit = width * 0.96;
+		double scale = size * (bold ? 1.04 : 1.0);
+		double space = 0.26 * scale;
+		List<String> lines = new ArrayList<>();
+		StringBuilder line = new StringBuilder();
+		double used = 0;
+		for (String word : text.split(" ")) {
+			double length = word.codePoints().mapToDouble(cp -> em(cp) * scale).sum();
+			if (used > 0 && used + space + length <= limit) {
+				line.append(' ').append(word);
+				used += space + length;
+				continue;
+			}
+			if (used > 0) {
+				lines.add(line.toString());
+				line.setLength(0);
+				used = 0;
+			}
+			if (length <= limit) {
+				line.append(word);
+				used = length;
+				continue;
+			}
+			for (int cp : word.codePoints().toArray()) {
+				double advance = em(cp) * scale;
+				if (used + advance > limit) {
+					lines.add(line.toString());
+					line.setLength(0);
+					used = 0;
+				}
+				line.appendCodePoint(cp);
+				used += advance;
+			}
+		}
+		lines.add(line.toString());
+		return lines;
+	}
+
+	// 낱말 단위로 줄을 미리 나눠 둔다. 화면이 한글을 글자 단위로 나눠 낱말이 두 줄로 갈리는 일을 막는다
+	// 줄 수가 늘지 않는 만큼 폭을 줄여 줄 길이를 고르게 맞추고, 한 글자 낱말이 줄 끝에 남는 나눔은 피한다
+	static String broken(String text, int width, int size, boolean bold) {
+		List<String> lines = wrap(text, width, size, bold);
+		List<String> best = lines;
+		for (int narrower = width - width / 20; lines.size() > 1 && narrower > width / 2; narrower -= width / 20) {
+			List<String> next = wrap(text, narrower, size, bold);
+			if (next.size() != lines.size()) {
+				break;
+			}
+			if (!dangling(next) || dangling(best)) {
+				best = next;
+			}
+		}
+		return String.join("\n", best);
+	}
+
+	private static boolean dangling(List<String> lines) {
+		for (int index = 0; index < lines.size() - 1; index++) {
+			String line = lines.get(index);
+			int space = line.lastIndexOf(' ');
+			if (space >= 0 && line.codePointCount(space + 1, line.length()) == 1) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Pretendard에서 잰 글자 폭을 글자 크기에 대한 비율로 묶었다
+	private static double em(int cp) {
+		if (cp >= 'A' && cp <= 'Z') {
+			return 0.68;
+		}
+		if (cp >= '0' && cp <= '9') {
+			return 0.62;
+		}
+		if (cp >= 'a' && cp <= 'z') {
+			return 0.56;
+		}
+		if (cp < 128) {
+			return 0.42;
+		}
+		return 0.9;
 	}
 
 }

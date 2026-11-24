@@ -135,12 +135,12 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		assertThat(document.get("id").asString()).isEqualTo(done.get("resultRef").get("presentationId").asString());
 		List<String> layouts = new ArrayList<>();
 		document.get("slides").forEach(slide -> layouts.add(slide.get("layoutId").asString()));
-		assertThat(layouts).containsExactly("title", "content", "content", "summary");
+		assertThat(layouts).containsExactly("title", "cards", "compare", "summary");
 		JsonNode cover = document.get("slides").get(0).get("elements");
 		assertThat(cover.get(0).get("style").get("fill").asString())
 			.isEqualTo(template.get("preview").get("backgroundColor").asString());
-		assertThat(cover.get(2).get("content").get("text").asString()).isEqualTo("생성한 발표 제목");
-		assertThat(texts(document.get("slides").get(1))).contains("항목 1", "첫째 문장", "출처: 선택 원문");
+		assertThat(texts(document.get("slides").get(0))).contains("생성한 발표 제목");
+		assertThat(texts(document.get("slides").get(1))).contains("항목 1", "핵심 문장", "첫째 요점", "첫째 문장", "출처: 선택 원문");
 		assertThat(texts(document.get("slides").get(2))).doesNotContain("출처: 선택 원문");
 		assertThat(texts(document.get("slides").get(3))).contains("정리");
 
@@ -305,10 +305,14 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 			var deck = PROVIDER_JSON.createObjectNode().put("title", "생성한 발표 제목").put("subtitle", "생성한 소개 문장");
 			var slides = deck.putArray("slides");
 			for (int index = 1; index <= slideCount.get(); index++) {
-				var slide = slides.addObject().put("title", "항목 " + index);
-				slide.putArray("points").add("첫째 문장").add("둘째 문장");
+				var slide = slides.addObject().put("layout", index % 2 == 1 ? "cards" : "compare")
+					.put("title", "항목 " + index).put("message", "핵심 문장");
+				var points = slide.putArray("points");
+				points.addObject().put("head", "첫째 요점").put("body", "첫째 문장");
+				points.addObject().put("head", "둘째 요점").put("body", "둘째 문장");
 			}
-			deck.putObject("closing").put("title", "정리").putArray("points").add("마무리 문장");
+			deck.putObject("closing").put("layout", "list").put("title", "정리").put("message", "")
+				.putArray("points").addObject().put("head", "마무리").put("body", "마무리 문장");
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			response.putArray("output").addObject().put("type", "message").putArray("content")
 				.addObject().put("type", "output_text").put("text", PROVIDER_JSON.writeValueAsString(deck));
