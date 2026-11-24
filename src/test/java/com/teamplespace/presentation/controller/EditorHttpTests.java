@@ -117,6 +117,17 @@ class EditorHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void aiRevisionIsRefusedWhenProviderIsOff() throws Exception {
+		Browser owner = signup("제공자 꺼짐");
+		String project = createProject(owner, "AI 수정 꺼짐");
+		JsonNode title = sampleElement(owner, project, 1, 0);
+		assertThat(owner.get("/capabilities").get("featureFlags").get("aiRevision").asBoolean()).isFalse();
+		assertThat(owner.request("POST", "/slides/" + title.get("slideId").asString() + "/ai-revision-jobs",
+				Map.of("generation", 1, "prompt", "짧게"), 503, UUID.randomUUID().toString()).get("error").get("code")
+			.asString()).isEqualTo("SERVICE_UNAVAILABLE");
+	}
+
+	@Test
 	void sameElementConflictIsRejectedAndDifferentElementsBothSave() throws Exception {
 		Browser owner = signup("소유자");
 		Browser member = signup("팀원");
