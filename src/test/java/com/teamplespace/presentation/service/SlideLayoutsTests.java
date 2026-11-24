@@ -88,7 +88,7 @@ class SlideLayoutsTests {
 
 	@Test
 	void fitsDenseAgendaAndListWithoutCoveringTheSource() {
-		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#212735", "#285BDD", "rule");
+		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#888888", "#888888", "rule");
 		String title = String.join(" ", "가".repeat(14), "나".repeat(14), "다".repeat(10));
 		String body = String.join(" ", "가".repeat(30), "나".repeat(30), "다".repeat(28));
 		List<Point> points = java.util.Collections.nCopies(5, new Point("키워드", body));

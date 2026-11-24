@@ -53,7 +53,7 @@ final class SlideLayouts {
 			String body = readable(background);
 			String title = contrast(background, heading) < 3 ? body : heading;
 			String mark = accent == null || contrast(background, accent) < 1.6 ? title : accent;
-			String markText = contrast(background, mark) < 3.4 ? title : mark;
+			String markText = textOn(background, mark);
 			String muted = mix(body, background, 0.3);
 			if (contrast(background, muted) < 4.5) {
 				muted = body;
@@ -63,7 +63,15 @@ final class SlideLayouts {
 		}
 
 		static String readable(String background) {
-			return contrast(background, LIGHT) >= contrast(background, DARK) ? LIGHT : DARK;
+			String ink = contrast(background, LIGHT) >= contrast(background, DARK) ? LIGHT : DARK;
+			if (contrast(background, ink) >= 4.5) {
+				return ink;
+			}
+			return contrast(background, "#FFFFFF") >= 4.5 ? "#FFFFFF" : "#000000";
+		}
+
+		static String textOn(String background, String color) {
+			return contrast(background, color) >= 4.5 ? color : readable(background);
 		}
 
 		static double contrast(String first, String second) {
@@ -274,6 +282,7 @@ final class SlideLayouts {
 		int rowHeight = Math.min(84, 560 / rows);
 		int top = (HEIGHT - rowHeight * rows) / 2;
 		int number = columns == 1 ? 22 : 19;
+		String itemColor = Theme.textOn(theme.background(), theme.heading());
 		for (int index = 0; index < titles.size(); index++) {
 			int x = left + index / rows * (columnWidth + 40);
 			int y = top + index % rows * rowHeight;
@@ -284,8 +293,7 @@ final class SlideLayouts {
 			int textTop = y + (rowHeight - fit.height(1.3)) / 2;
 			text(x, y + (rowHeight - 30) / 2, 48, 30, two(index + 1), number, 700, theme.accentText(), "left", 1.3);
 			text(x + 56, textTop, columnWidth - 56, fit.height(1.3), titles.get(index), fit.size(),
-					600, theme.heading(),
-					"left", 1.3);
+					600, itemColor, "left", 1.3);
 			rect(x, y + rowHeight - 1, columnWidth, 1, theme.line(), 0);
 		}
 		return new Slide("agenda", out);
@@ -407,8 +415,7 @@ final class SlideLayouts {
 			int y = top + height - pad - tallest - 14;
 			Fit head = heads.get(index);
 			text(x + pad, y, inner, head.height(1.3), points.get(index).head(), head.size(),
-					700, theme.heading(), "left",
-					1.3);
+					700, Theme.textOn(theme.surface(), theme.heading()), "left", 1.3);
 			y += head.height(1.3) + 14;
 			Fit body = bodies.get(index);
 			text(x + pad, y, inner, body.height(1.5), points.get(index).body(), body.size(), 400, theme.body(), "left",
@@ -450,7 +457,7 @@ final class SlideLayouts {
 				text(MARGIN, line, 56, (int) Math.ceil(headSize * 1.35) + 4, two(index + 1), headSize,
 						700, theme.accentText(), "left", 1.35);
 				text(MARGIN + 72, line, 300, head.height(1.35), points.get(index).head(), head.size(), 700,
-						theme.heading(), "left", 1.35);
+						Theme.textOn(theme.background(), theme.heading()), "left", 1.35);
 				text(MARGIN + 420, line,
 						700, body.height(1.5), points.get(index).body(), body.size(), 400, theme.body(),
 						"left", 1.5);
@@ -489,7 +496,7 @@ final class SlideLayouts {
 			Fit head = fit(points.get(index).head(), inner, 24, 18, 2, true);
 			int y = top + circle + 28;
 			text(center - inner / 2, y, inner, head.height(1.3), points.get(index).head(), head.size(), 700,
-					theme.heading(), "center", 1.3);
+					Theme.textOn(theme.background(), theme.heading()), "center", 1.3);
 			y += head.height(1.3) + 12;
 			Fit body = fit(points.get(index).body(), inner, 19, 15, 6, false);
 			text(center - inner / 2, y, inner, body.height(1.5), points.get(index).body(), body.size(),
@@ -520,7 +527,7 @@ final class SlideLayouts {
 			Point point = section.points().get(index);
 			boolean filled = index == 1;
 			int x = MARGIN + index * (width + gap);
-			String ink = filled ? onStrong : theme.heading();
+			String ink = filled ? onStrong : Theme.textOn(theme.surface(), theme.heading());
 			String text = filled ? onStrong : theme.body();
 			rect(x, top, width, height, filled ? strong : theme.surface(), 24);
 			Fit head = fit(point.head(), width - pad * 2, 32, 22, 2, true);
