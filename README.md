@@ -38,6 +38,43 @@ Gradle은 저장소의 wrapper를 사용하므로 따로 설치하지 않는다.
 
    기동할 때 Flyway가 마이그레이션을 적용한다.
 
+## 홈 개발 서버 자동 배포
+
+GitHub Actions가 PR에서 MySQL 테스트와 컨테이너 기동을 검사한다. `main`에서는 CI가 보관한 JAR의 체크섬을 검증하고, API 응답과 업로드 경로를 확인한 이미지를 GHCR에 커밋 SHA 태그로 발행한다. 발행이 끝나면 배포 작업이 SSH로 서버의 `deploy/ssh-deploy.sh`를 실행한다. 서버는 그 실행의 일회용 토큰으로 이미지를 받고 같은 커밋의 Compose 설정으로 교체한 뒤 API 응답을 확인한다. 패키지는 비공개로 두어도 된다. 결과는 Actions의 배포 작업 로그에서 확인한다.
+
+서버에는 Docker와 Compose, Git이 필요하다. 최초 한 번 배포 계정으로 저장소를 받고 설정 파일을 만든다. DB 볼륨 `teamplespace-backend-dev_dbdata`가 이미 있는 서버는 비밀번호가 볼륨에 남아 있으므로 설정 파일을 새로 만들지 않고 기존 `settings.env`와 `api.env`를 `deploy/`에 권한 600으로 옮긴다.
+
+```bash
+git clone --depth 1 https://github.com/TeampleSpace/TeampleSpace-Backend.git ~/apps/teamplespace-backend
+cd ~/apps/teamplespace-backend/deploy
+(umask 077; for key in DB_PASSWORD DB_ROOT_PASSWORD AUTH_SECRET; do echo "$key=$(openssl rand -hex 32)"; done > settings.env)
+```
+
+타이머 방식으로 설치했던 서버는 전환 전에 이전 구성을 제거한다. 남겨 두면 타이머가 예전 이미지를 다시 적용한다. 기존 설정 파일을 옮긴 뒤에 `/etc/teamplespace-backend`를 지운다.
+
+```bash
+sudo systemctl disable --now teamplespace-backend-update.timer
+sudo systemctl stop teamplespace-backend-update.service
+sudo rm -f /etc/systemd/system/teamplespace-backend-update.service /etc/systemd/system/teamplespace-backend-update.timer
+sudo systemctl daemon-reload
+```
+
+배포 전용 SSH 키를 만들고 공개 키를 서버의 `~/.ssh/authorized_keys`에 배포 명령만 실행하도록 등록한다.
+
+```text
+restrict,command="bash /home/계정/apps/teamplespace-backend/deploy/ssh-deploy.sh" ssh-ed25519 공개키
+```
+
+GitHub에는 `main`만 배포할 수 있는 `home-dev` 환경을 만들고 시크릿 `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`와 변수 `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`를 둔다.
+
+DB와 업로드 볼륨은 `teamplespace-backend-dev` 프로젝트에 유지한다. Vercel 출처와 공개 API 주소, SMTP 등 앱 설정은 `deploy/api.env`에 권한 600으로 둔다. 두 설정 파일은 Git이 추적하지 않는다. 공개 HTTPS 연결은 기존 Nginx에 별도로 설정한다.
+
+배포가 실패하면 Actions 로그에서 실패한 단계를 확인하고 배포 작업을 다시 실행한다. `api.env`를 바꾸거나 이전 버전으로 복구할 때는 서버에서 적용할 커밋의 이미지를 지정한다. 복구 전에는 DB 스키마 호환성을 확인한다.
+
+```bash
+bash ~/apps/teamplespace-backend/deploy/update.sh ghcr.io/teamplespace/teamplespace-backend:커밋SHA
+```
+
 ## 테스트
 
 ```bash

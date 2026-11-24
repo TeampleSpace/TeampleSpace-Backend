@@ -5,9 +5,14 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.release.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -32,7 +37,11 @@ jobs:
           cd "$release_dir"
           sha256sum "$file" > SHA256SUMS
           sha256sum --check SHA256SUMS
+      - name: PR 배포 이미지 기동 확인
+        if: github.event_name == 'pull_request'
+        run: bash deploy/check-image.sh "$RUNNER_TEMP/backend-release" "teamplespace-backend:$GITHUB_SHA"
       - name: main 배포 후보 보관
+        id: release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
@@ -43,3 +52,68 @@ jobs:
       - name: MySQL 로그
         if: failure()
         run: docker compose logs mysql
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    concurrency:
+      group: backend-home-dev-publish
+      cancel-in-progress: false
+    env:
+      REGISTRY_IMAGE: ghcr.io/teamplespace/teamplespace-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: 검증된 JAR 내려받기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/backend.zip"
+          unzip -q "$RUNNER_TEMP/backend.zip" -d "$RUNNER_TEMP/backend-release"
+      - name: 배포할 이미지 빌드와 API 기동 확인
+        run: bash deploy/check-image.sh "$RUNNER_TEMP/backend-release" "$REGISTRY_IMAGE:$GITHUB_SHA"
+      - name: 검증한 main 이미지 발행
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$REGISTRY_IMAGE:$GITHUB_SHA"
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: home-dev
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: backend-home-dev-deploy
+      cancel-in-progress: false
+    steps:
+      - name: 홈 서버에 발행한 이미지 반영
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo "더 새로운 main 커밋이 있어 이 커밋은 배포하지 않습니다."
+            exit 0
+          fi
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # 서버의 강제 명령이 토큰을 표준 입력으로 받는다
+          printf '%s' "$GH_TOKEN" | ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 "$DEPLOY_TARGET" "$GITHUB_SHA"

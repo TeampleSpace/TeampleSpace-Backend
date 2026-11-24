@@ -5,6 +5,7 @@
     { "code": "IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "retryable": false, "basis": "설계", "meaning": "같은 멱등키로 본문이 다른 요청을 보냈다" },
     { "code": "REQUEST_IN_PROGRESS", "httpStatus": 409, "retryable": true, "basis": "설계", "meaning": "같은 멱등키의 요청을 처리하는 중이다. Retry-After 뒤에 같은 요청으로 다시 보낸다" },
     { "code": "REGENERATION_NOT_ENABLED", "httpStatus": 409, "retryable": false, "basis": "설계", "meaning": "이미 발표 자료가 있어 다시 생성할 수 없다" },
+    { "code": "REQUEST_NOT_PENDING", "httpStatus": 409, "retryable": false, "basis": "기술 선택", "meaning": "승인, 거절, 취소하려는 요청이 이미 처리됐거나 다른 사람이 승인하는 중이다" },
     { "code": "PRESENTATION_NOT_READY", "httpStatus": 404, "retryable": false, "basis": "설계", "meaning": "아직 발표 자료를 생성하지 않았다" },
     { "code": "EDIT_GROUP_CLOSED", "httpStatus": 409, "retryable": false, "basis": "기술 선택", "meaning": "닫힌 편집 묶음을 다시 사용했다. 코드는 설계서에 있고 상태는 상태 충돌이라 409로 했다. currentVersions를 함께 돌려준다" },
     { "code": "CHANGE_NOT_FINALIZED", "httpStatus": 409, "retryable": false, "basis": "기술 선택", "meaning": "아직 열려 있는 변경 묶음을 승인하려 했다. 코드는 설계서에 있고 상태는 상태 충돌이라 409로 했다" },
@@ -71,6 +72,13 @@
     { "code": "JOB_MATERIAL_SUMMARY_PROVIDER_UNAVAILABLE", "httpStatus": null, "retryable": true, "basis": "기술 선택", "meaning": "자료 요약 제공자 호출에 실패했다. 일시 오류만 내부 재시도한다" },
     { "code": "JOB_MATERIAL_SUMMARY_INVALID_RESULT", "httpStatus": null, "retryable": false, "basis": "기술 선택", "meaning": "자료 요약 응답이 비었거나 형식과 길이가 맞지 않아 반영하지 않았다" },
     { "code": "JOB_MATERIAL_SUMMARY_ACCESS_REVOKED", "httpStatus": null, "retryable": false, "basis": "권한", "meaning": "자료 요약 요청자의 프로젝트 접근이 회수되어 반영하지 않았다" },
+    { "code": "JOB_PRESENTATION_PROVIDER_UNAVAILABLE", "httpStatus": null, "retryable": true, "basis": "기술 선택", "meaning": "발표 자료 생성 제공자 호출에 실패했다. 일시 오류만 내부 재시도한다" },
+    { "code": "JOB_PRESENTATION_INVALID_RESULT", "httpStatus": null, "retryable": false, "basis": "기술 선택", "meaning": "발표 자료 생성 응답의 형식이나 슬라이드 수, 글자 수가 맞지 않아 반영하지 않았다" },
+    { "code": "JOB_PRESENTATION_ACCESS_REVOKED", "httpStatus": null, "retryable": false, "basis": "권한", "meaning": "발표 자료 생성 요청자의 프로젝트 접근이 회수되어 반영하지 않았다" },
+    { "code": "JOB_REVISION_PROVIDER_UNAVAILABLE", "httpStatus": null, "retryable": true, "basis": "기술 선택", "meaning": "슬라이드 수정 제안 제공자 호출에 실패했다. 일시 오류만 내부 재시도한다" },
+    { "code": "JOB_REVISION_INVALID_RESULT", "httpStatus": null, "retryable": false, "basis": "기술 선택", "meaning": "슬라이드 수정 제안 응답의 형식이나 글상자 번호, 글자 수가 맞지 않아 제안을 만들지 않았다" },
+    { "code": "JOB_REVISION_NO_CHANGE", "httpStatus": null, "retryable": false, "basis": "기술 선택", "meaning": "수정 제안 응답이 원래 글과 같아 제안을 만들지 않았다" },
+    { "code": "JOB_REVISION_ACCESS_REVOKED", "httpStatus": null, "retryable": false, "basis": "권한", "meaning": "수정 제안 요청자의 프로젝트 접근이 회수되어 제안을 만들지 않았다" },
     { "code": "JOB_TARGET_GONE", "httpStatus": null, "retryable": false, "basis": "기술 선택", "meaning": "작업 대상이 삭제되어 결과를 반영하지 않았다. 작업의 error.code로 전달한다" }
   ]
 }

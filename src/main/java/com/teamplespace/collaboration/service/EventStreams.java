@@ -2,6 +2,7 @@ package com.teamplespace.collaboration.service;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -37,6 +38,8 @@ public class EventStreams {
 
 	private final ProjectAccess access;
 
+	private final Presence presence;
+
 	// ponytail: 연결마다 0.5초 간격으로 DB를 조회하고 스레드 하나로 보낸다
 	// 동시 연결이 늘면 커밋 알림으로 깨우고 보내는 스레드를 나눈다
 	private final ScheduledExecutorService poller = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -45,9 +48,10 @@ public class EventStreams {
 		return thread;
 	});
 
-	public EventStreams(ProjectEvents events, ProjectAccess access) {
+	public EventStreams(ProjectEvents events, ProjectAccess access, Presence presence) {
 		this.events = events;
 		this.access = access;
+		this.presence = presence;
 	}
 
 	// 커서가 없으면 지금부터의 이벤트만 보낸다
@@ -74,6 +78,9 @@ public class EventStreams {
 		private final UUID projectId;
 
 		private String cursor;
+
+		// 마지막으로 보낸 다른 팀원의 커서 목록. 바뀔 때만 다시 보낸다
+		private List<Presence.Cursor> cursors = List.of();
 
 		// 응답 헤더는 첫 전송 때 나간다. 첫 조회에 이벤트가 없어도 주석 줄을 보내 연결을 바로 알린다
 		private int idlePolls = KEEP_ALIVE_POLLS - 1;
@@ -108,6 +115,15 @@ public class EventStreams {
 						.name(event.get("type").asString())
 						.data(event, MediaType.APPLICATION_JSON));
 					cursor = id;
+				}
+				// 커서 위치는 다시 받을 필요가 없어 이벤트 순번 없이 보낸다
+				List<Presence.Cursor> now = presence.others(projectId, actor.userId());
+				if (!now.equals(cursors)) {
+					emitter.send(SseEmitter.event()
+						.name("presence.updated")
+						.data(Map.of("projectId", projectId.toString(), "cursors", now), MediaType.APPLICATION_JSON));
+					cursors = now;
+					idlePolls = 0;
 				}
 				if (!replay.events().isEmpty()) {
 					idlePolls = 0;

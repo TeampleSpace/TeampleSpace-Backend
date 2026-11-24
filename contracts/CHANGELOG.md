@@ -5,6 +5,40 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-24 문장 요청으로 슬라이드 글을 고치는 AI 수정 추가
+
+- 수정 작업 등록 `POST /v1/slides/{slideId}/ai-revision-jobs`와 적용 `POST /v1/ai-proposals/{proposalId}/apply` 경로, `SlideRevisionRequest`, `SlideRevisionResult`, `SlideRevisionApplied` 형식을 추가
+- 작업 종류는 `slide_revision`, 대상은 `slide`다. 제안은 작업의 `resultRef`에 담기고 제안 식별자는 작업 식별자다
+- 적용은 대상마다 요소 수정과 같은 `element.updated` 이벤트와 변경 이력을 남긴다
+- `featureFlags.aiRevision`이 발표 생성 제공자 설정을 따른다
+- 작업 실패 코드 `JOB_REVISION_PROVIDER_UNAVAILABLE`, `JOB_REVISION_INVALID_RESULT`, `JOB_REVISION_NO_CHANGE`, `JOB_REVISION_ACCESS_REVOKED`를 추가
+
+## 2026-11-23 편집 화면 커서 위치 공유 추가
+
+- 커서 위치 경로 `POST /v1/projects/{projectId}/presence`와 `PresenceUpdateRequest`, `PresenceUpdated` 형식을 추가
+- 이벤트 구독은 나를 뺀 팀원의 커서 목록이 바뀔 때 `presence.updated`를 SSE `id` 없이 보낸다. 이벤트 순번과 재연결 커서에는 영향이 없다
+
+## 2026-11-23 AI 작업과 디자인 변경 승인 요청 추가
+
+- 승인 요청 만들기, 목록, 승인, 거절, 취소 경로와 `ChangeRequest`, `ChangeRequestList`, `ChangeRequestCreate` 형식, 오류 코드 `REQUEST_NOT_PENDING`을 추가
+- 요청과 처리 결과를 `request.created`, `request.updated` 이벤트로 보낸다
+
+## 2026-11-23 자료 댓글 추가
+
+- 자료 댓글 목록, 작성, 삭제 경로와 `MaterialComment`, `MaterialCommentList`, `MaterialCommentRequest`, `MaterialCommentDeleted` 형식을 추가
+- 댓글 작성과 삭제는 `material.comment.created`, `material.comment.deleted` 이벤트를 보낸다. 받은 화면은 댓글 목록을 다시 읽는다
+
+## 2026-11-23 팀원을 내보내면 초대 링크 무효화
+
+- 소유자가 팀원을 내보내면 활성 초대 링크를 무효로 한다. 다음 초대 조회는 새 링크를 돌려주고, 내보낸 사람은 새 링크로 다시 참여할 수 있다. 스키마와 예제는 바뀌지 않았다
+
+## 2026-11-22 첫 발표 자료 생성 작업 추가
+
+- 발표 자료 생성 작업 등록과 고정 입력, 결과 참조 형식, `featureFlags.presentationGeneration`을 추가
+- 작업 실패 코드 `JOB_PRESENTATION_PROVIDER_UNAVAILABLE`, `JOB_PRESENTATION_INVALID_RESULT`, `JOB_PRESENTATION_ACCESS_REVOKED`를 추가
+- 성공하면 `presentation.replaced` 이벤트를 보낸다. 받은 화면은 동기화 스냅샷을 다시 읽는다
+- 직접 입력에서 고른 프로젝트 글꼴은 텍스트 `fontFamily`에 `ProjectFont-{fontAssetId}`로 적는다
+
 ## 2026-11-21 슬라이드와 요소의 추가, 삭제, 순서 변경 추가
 
 - `SlideCreateRequest`, `SlideDeleteRequest`, `SlideOrderRequest`, `ElementCreateRequest`, `ElementDeleteRequest`와 예제를 추가

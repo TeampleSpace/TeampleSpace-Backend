@@ -30,8 +30,11 @@ public class ApiException extends RuntimeException {
 
 	// 버전 충돌. name은 계약의 CurrentVersions 항목 이름이다
 	public static ApiException conflict(String name, long currentVersion) {
-		return new ApiException(ErrorCode.VERSION_CONFLICT, null,
-				Map.of("currentVersions", Map.of(name, currentVersion)));
+		return conflict(Map.of(name, currentVersion));
+	}
+
+	public static ApiException conflict(Map<String, Long> currentVersions) {
+		return new ApiException(ErrorCode.VERSION_CONFLICT, null, Map.of("currentVersions", currentVersions));
 	}
 
 	// 어느 입력이 틀렸는지 함께 알린다

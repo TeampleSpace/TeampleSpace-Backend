@@ -125,6 +125,41 @@
     "valid": true
   },
   {
+    "example": "change-request.json",
+    "schema": "api.schema.json#/$defs/ChangeRequest",
+    "valid": true
+  },
+  {
+    "example": "change-request-list.json",
+    "schema": "api.schema.json#/$defs/ChangeRequestList",
+    "valid": true
+  },
+  {
+    "example": "change-request-create.json",
+    "schema": "api.schema.json#/$defs/ChangeRequestCreate",
+    "valid": true
+  },
+  {
+    "example": "material-comment.json",
+    "schema": "api.schema.json#/$defs/MaterialComment",
+    "valid": true
+  },
+  {
+    "example": "material-comment-list.json",
+    "schema": "api.schema.json#/$defs/MaterialCommentList",
+    "valid": true
+  },
+  {
+    "example": "material-comment-request.json",
+    "schema": "api.schema.json#/$defs/MaterialCommentRequest",
+    "valid": true
+  },
+  {
+    "example": "material-comment-deleted.json",
+    "schema": "api.schema.json#/$defs/MaterialCommentDeleted",
+    "valid": true
+  },
+  {
     "example": "sync-snapshot-editor.json",
     "schema": "api.schema.json#/$defs/SyncSnapshot",
     "valid": true
@@ -520,6 +555,16 @@
     "valid": true
   },
   {
+    "example": "presentation-job-input.json",
+    "schema": "stage-3-generation.schema.json#/$defs/PresentationJobInput",
+    "valid": true
+  },
+  {
+    "example": "presentation-job-result.json",
+    "schema": "stage-3-generation.schema.json#/$defs/PresentationJobResult",
+    "valid": true
+  },
+  {
     "example": "invalid/presentation-generation-unset-design.json",
     "schema": "stage-3-generation.schema.json#/$defs/PresentationGenerationSnapshot",
     "valid": false
@@ -527,6 +572,16 @@
   {
     "example": "material-summary-job-request.json",
     "schema": "stage-2.schema.json#/$defs/MaterialSummaryJobRequest",
+    "valid": true
+  },
+  {
+    "example": "presence-update-request.json",
+    "schema": "api.schema.json#/$defs/PresenceUpdateRequest",
+    "valid": true
+  },
+  {
+    "example": "event-presence-updated.json",
+    "schema": "api.schema.json#/$defs/PresenceUpdated",
     "valid": true
   },
   {
