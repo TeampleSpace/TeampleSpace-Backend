@@ -48,8 +48,8 @@ class SlideLayoutsTests {
 		Files.createDirectories(folder);
 		List<String> problems = new ArrayList<>();
 		for (var theme : themes().entrySet()) {
-			for (var deck : Map.of("sample", sample(), "longest", longest(), "few", few(), "unspaced", unspaced())
-				.entrySet()) {
+			for (var deck : Map.of("sample", sample(), "longest", longest(), "few", few(), "unspaced", unspaced(90),
+					"unspaced-mid", unspaced(50)).entrySet()) {
 				List<Slide> slides = SlideLayouts.build(json, deck.getValue(), theme.getValue(), sources(deck.getValue()));
 				for (int index = 0; index < slides.size(); index++) {
 					String name = theme.getKey() + " " + deck.getKey() + " " + index + " " + slides.get(index).layout();
@@ -252,9 +252,9 @@ class SlideLayoutsTests {
 	}
 
 	// 띄어쓰기 없는 가장 긴 키워드와 설명
-	private static Deck unspaced() {
+	private static Deck unspaced(int bodyLength) {
 		String head = "가".repeat(SlideLayouts.HEAD_MAX);
-		String body = "나".repeat(SlideLayouts.POINT_MAX);
+		String body = "나".repeat(bodyLength);
 		List<Section> sections = new ArrayList<>();
 		String[] layouts = { "statement", "cards", "compare", "process", "list" };
 		int[] counts = { 3, 4, 2, 5, 5 };
