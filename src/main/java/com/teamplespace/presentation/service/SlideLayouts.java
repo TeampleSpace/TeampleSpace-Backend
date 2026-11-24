@@ -802,7 +802,8 @@ final class SlideLayouts {
 			int x0 = 1216 - n * w - (n - 1) * 16;
 			int tallest = 0;
 			for (Point p : s.points()) {
-				tallest = Math.max(tallest, 46 + fit(p.body(), w, 16, 13, 4, 500, false).height(1.5));
+				tallest = Math.max(tallest, 14 + fit(p.head(), w, 18, 14, 2, 800, false).height(1.4) + 6
+						+ fit(p.body(), w, 16, 13, 4, 500, false).height(1.5));
 			}
 			int top = 650 - tallest;
 			if (top < bottom + 24) {
@@ -811,8 +812,8 @@ final class SlideLayouts {
 			for (int i = 0; i < n; i++) {
 				int x = x0 + i * (w + 16);
 				rect(x, top, w, 2, t.ink());
-				tx(x, top + 14, w, s.points().get(i).head(), 18, 14, 1, 800, t.accentText(), "left", 1.4);
-				tx(x, top + 46, w, s.points().get(i).body(), 16, 13, 4, 500, t.body(), "left", 1.5);
+				int h = tx(x, top + 14, w, s.points().get(i).head(), 18, 14, 2, 800, t.accentText(), "left", 1.4);
+				tx(x, top + 20 + h, w, s.points().get(i).body(), 16, 13, 4, 500, t.body(), "left", 1.5);
 			}
 			return true;
 		}
@@ -928,8 +929,8 @@ final class SlideLayouts {
 		@Override
 		void footer(String source, int page) {
 			boolean split = out.stream().anyMatch(e -> e.type().equals("shape") && e.x() == 640 && e.width() == 640);
-			if (source != null && !split) {
-				tx(64, 676, 560, source, 13, 12, 1, 500, t.muted(), "left", 1.4);
+			if (source != null) {
+				tx(64, 676, split ? 540 : 900, source, 13, 12, 1, 500, t.muted(), "left", 1.4);
 			}
 			String color = split ? Theme.guard(Theme.mix(t.bg(), t.ink(), 0.35), 4.5, t.bg(), t.ink()) : t.muted();
 			tx(1000, 676, 216, two(page), 14, 14, 1, 700, color, "right", 1.4);
@@ -1798,7 +1799,8 @@ final class SlideLayouts {
 			int x0 = col(12 - n * 3);
 			int tallest = 0;
 			for (Point p : s.points()) {
-				tallest = Math.max(tallest, 46 + fit(p.body(), w, 15, 12, 4, 500, false).height(1.5));
+				tallest = Math.max(tallest, 16 + fit(p.head(), w, 18, 13, 2, 800, false).height(1.4) + 6
+						+ fit(p.body(), w, 15, 12, 4, 500, false).height(1.5));
 			}
 			int top = 650 - tallest;
 			if (top < bottom + 24) {
@@ -1807,8 +1809,8 @@ final class SlideLayouts {
 			for (int i = 0; i < n; i++) {
 				int x = x0 + i * 300;
 				rect(x, top, w, 2, t.onAccent());
-				tx(x, top + 16, w, s.points().get(i).head(), 18, 13, 1, 800, t.onAccent(), "left", 1.4);
-				tx(x, top + 46, w, s.points().get(i).body(), 15, 12, 4, 500, t.onAccent(), "left", 1.5);
+				int h = tx(x, top + 16, w, s.points().get(i).head(), 18, 13, 2, 800, t.onAccent(), "left", 1.4);
+				tx(x, top + 22 + h, w, s.points().get(i).body(), 15, 12, 4, 500, t.onAccent(), "left", 1.5);
 			}
 			return true;
 		}
@@ -2044,15 +2046,16 @@ final class SlideLayouts {
 			}
 			int w = (1184 - 24 * (n - 1)) / n;
 			for (Point p : s.points()) {
-				if (28 + 40 + fit(p.body(), w - 64, 18, 13, 3, 500, false).height(1.6) + 16 > 180) {
+				if (24 + fit(p.head(), w - 64, 24, 16, 2, 800, false).height(1.3) + 6
+						+ fit(p.body(), w - 64, 18, 13, 3, 500, false).height(1.6) + 16 > 180) {
 					return false;
 				}
 			}
 			for (int i = 0; i < n; i++) {
 				int x = 48 + i * (w + 24);
 				rect(x, 492, w, 180, PASTELS[i], 28);
-				tx(x + 32, 520, w - 64, s.points().get(i).head(), 24, 16, 1, 800, INK, "left", 1.3);
-				tx(x + 32, 560, w - 64, s.points().get(i).body(), 18, 13, 3, 500, SOFT, "left", 1.6);
+				int h = tx(x + 32, 516, w - 64, s.points().get(i).head(), 24, 16, 2, 800, INK, "left", 1.3);
+				tx(x + 32, 522 + h, w - 64, s.points().get(i).body(), 18, 13, 3, 500, SOFT, "left", 1.6);
 			}
 			return true;
 		}
@@ -2325,16 +2328,17 @@ final class SlideLayouts {
 			int w = (1152 - 24 * (n - 1)) / n;
 			int top = Math.max(170 + f.height(1.3) + 50, 470);
 			for (Point p : s.points()) {
-				if (top + 66 + fit(p.body(), w - 56, 18, 13, 3, 400, false).height(1.6) + 16 > 656) {
+				if (top + 28 + fit(p.head(), w - 56, 22, 16, 2, 700, false).height(1.3) + 8
+						+ fit(p.body(), w - 56, 18, 13, 3, 400, false).height(1.6) + 16 > 640) {
 					return false;
 				}
 			}
 			for (int i = 0; i < n; i++) {
 				int x = 64 + i * (w + 24);
-				rect(x, top, w, 656 - top, panel);
+				rect(x, top, w, 640 - top, panel);
 				rect(x, top, w, 4, t.accent2());
-				tx(x + 28, top + 28, w - 56, s.points().get(i).head(), 22, 16, 1, 700, ink, "left", 1.3);
-				tx(x + 28, top + 66, w - 56, s.points().get(i).body(), 18, 13, 3, 400, soft, "left", 1.6);
+				int h = tx(x + 28, top + 28, w - 56, s.points().get(i).head(), 22, 16, 2, 700, ink, "left", 1.3);
+				tx(x + 28, top + 36 + h, w - 56, s.points().get(i).body(), 18, 13, 3, 400, soft, "left", 1.6);
 			}
 			return true;
 		}
@@ -2481,12 +2485,13 @@ final class SlideLayouts {
 
 		@Override
 		void footer(String source, int page) {
-			if (out.get(0).style().get("fill").asString().equals(t.accent())) {
-				return;
+			boolean filled = out.get(0).style().get("fill").asString().equals(t.accent());
+			if (!filled) {
+				rect(64, 664, 1152, 1, t.line());
 			}
-			rect(64, 664, 1152, 1, t.line());
-			tx(64, 676, 900, footerTitle(source), 13, 12, 1, 500, t.muted(), "left", 1.4);
-			tx(1016, 676, 200, two(page), 13, 13, 1, 800, t.accentText(), "right", 1.4);
+			String color = footColor();
+			tx(64, 676, 900, footerTitle(source), 13, 12, 1, 500, color, "left", 1.4);
+			tx(1016, 676, 200, two(page), 13, 13, 1, 800, filled ? color : t.accentText(), "right", 1.4);
 		}
 	}
 
