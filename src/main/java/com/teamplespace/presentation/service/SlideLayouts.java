@@ -395,6 +395,11 @@ final class SlideLayouts {
 			out.add(new Element("text", x, y, w, f.height(lh), json.createObjectNode().put("text", text), style));
 		}
 
+		// 좁은 칸에 한 줄로 들어가는 수치만 쓰고, 안 들어가면 대신 쓸 글을 돌려준다
+		String fits(String value, int w, int min, String fallback) {
+			return !value.isEmpty() && fit(value, w, min, min, 1, 800, false).lines() == 1 ? value : fallback;
+		}
+
 		static String two(int number) {
 			return String.format("%02d", number);
 		}
@@ -628,7 +633,7 @@ final class SlideLayouts {
 			int inner = col - 28;
 			int tallest = 0;
 			for (Point p : s.points()) {
-				int label = p.figure().isEmpty() ? 0 : 28;
+				int label = fits(p.figure(), inner, 13, "").isEmpty() ? 0 : 28;
 				tallest = Math.max(tallest, label + fit(p.head(), inner, 28, 20, 2, 800, false).height(1.3) + 8
 						+ fit(p.body(), inner, 19, 14, 4, 400, false).height(1.55));
 			}
@@ -648,8 +653,9 @@ final class SlideLayouts {
 				tx(x, line - 76, inner, two(i + 1), 56, 56, 1, 800, done ? t.soft() : t.surface(), "left", 1.1);
 				ring(x, line, 32, 32, done ? t.accent() : t.bg(), done ? null : t.soft(), done ? 0 : 4);
 				int y = line + 52;
-				if (!p.figure().isEmpty()) {
-					y += tx(x, y, inner, p.figure(), 16, 13, 1, 700, t.accentText(), "left", 1.4) + 4;
+				String figure = fits(p.figure(), inner, 13, "");
+				if (!figure.isEmpty()) {
+					y += tx(x, y, inner, figure, 16, 13, 1, 700, t.accentText(), "left", 1.4) + 4;
 				}
 				y += tx(x, y, inner, p.head(), 28, 20, 2, 800, t.ink(), "left", 1.3);
 				tx(x, y + 8, inner, p.body(), 19, 14, 4, 400, t.body(), "left", 1.55);
@@ -892,8 +898,9 @@ final class SlideLayouts {
 				int y = top + i * row;
 				rect(64, y, 1152, 1, t.ink());
 				tx(64, y + 16, 120, "STEP " + (i + 1), 18, 15, 1, 800, t.accentText(), "left", 1.4);
-				if (!p.figure().isEmpty()) {
-					tx(200, y + 16, 160, p.figure(), 20, 14, 1, 700, t.muted(), "left", 1.4);
+				String figure = fits(p.figure(), 160, 14, "");
+				if (!figure.isEmpty()) {
+					tx(200, y + 16, 160, figure, 20, 14, 1, 700, t.muted(), "left", 1.4);
 				}
 				tx(380, y + 12, 320, p.head(), 32, 18, 2, 800, t.ink(), "left", 1.3);
 				tx(720, y + 16, 496, p.body(), 20, 14, 3, 500, t.body(), "left", 1.5);
@@ -1123,7 +1130,7 @@ final class SlideLayouts {
 				int by = i % 2 == 0 ? line - 40 - cardH : line + 46;
 				int x = Math.max(16, Math.min(WIDTH - 16 - w, cx - w / 2));
 				box(x, by, w, cardH, on ? t.accent() : card(), 32, on ? null : t.ink(), on ? 0 : 2);
-				String label = p.figure().isEmpty() ? "STEP " + (i + 1) : p.figure();
+				String label = fits(p.figure(), 94, 11, "STEP " + (i + 1));
 				pill(x + 20, by + 20, 110, label, on ? card() : t.accent2(), Theme.DARK);
 				int y = by + 68;
 				y += dx(x + 20, y, w - 40, p.head(), 26, 16, 1, on ? t.onAccent() : t.ink(), "left", 1.25);
@@ -1320,7 +1327,7 @@ final class SlideLayouts {
 			int n = s.points().size();
 			int gap = 24;
 			int w = (1152 - gap * (n - 1)) / n;
-			boolean figures = s.points().stream().allMatch(p -> !p.figure().isEmpty());
+			boolean figures = s.points().stream().allMatch(p -> !fits(p.figure(), w - 56, 28, "").isEmpty());
 			String hi = Theme.guard(t.accent2(), 3.4, t.accentText(), t.surface());
 			int tallest = 0;
 			for (Point p : s.points()) {
@@ -1394,7 +1401,7 @@ final class SlideLayouts {
 				int x = 64 + i * col;
 				boolean on = i == 1;
 				rect(x + 4, top + 4, col - 8, 40, on ? t.accent2() : t.accent(), 6);
-				String label = p.figure().isEmpty() ? "STEP " + (i + 1) : p.figure();
+				String label = fits(p.figure(), col - 32, 11, "STEP " + (i + 1));
 				tx(x + 16, top + 14, col - 32, label, 15, 11, 1, 800, on ? t.onAccent2() : t.onAccent(), "left", 1.3);
 				int y = top + 48 + 24;
 				rect(x + 4, y, col - 28, tallest, t.surface(), 16);
@@ -1653,7 +1660,7 @@ final class SlideLayouts {
 				boolean last = i == n - 1;
 				String fill = last ? t.accent() : i == 0 ? sageLight() : sage();
 				oval(cx - size / 2, line - size / 2, size, size, fill);
-				String label = p.figure().isEmpty() ? String.valueOf(i + 1) : p.figure();
+				String label = fits(p.figure(), size - 8, 10, String.valueOf(i + 1));
 				tx(cx - size / 2 + 4, line - 11, size - 8, label, 16, 10, 1, 700, Theme.readable(fill), "center", 1.3);
 				int x = Math.max(16, Math.min(WIDTH - 16 - inner, cx - inner / 2));
 				int y = line + 82;
@@ -1898,7 +1905,7 @@ final class SlideLayouts {
 				int bar = 110 + i * stepUp;
 				String fill = i == n - 1 ? t.accent() : t.ink();
 				rect(x, 640 - bar, w, bar, fill);
-				String label = p.figure().isEmpty() ? "STEP " + (i + 1) : p.figure();
+				String label = fits(p.figure(), w - 40, 12, "STEP " + (i + 1));
 				tx(x + 20, 640 - bar + 16, w - 40, label, 16, 12, 1, 800, Theme.readable(fill), "left", 1.4);
 				int y = 640 - bar - 16 - text;
 				y += tx(x, y, w, p.head(), 26, 16, 1, 900, t.ink(), "left", 1.3);
@@ -2165,7 +2172,7 @@ final class SlideLayouts {
 				rect(x, 222, w, 450, fills[i], 28);
 				int pw = Math.min(130, w - 48);
 				rect(x + 24, 246, pw, 40, on ? WHITE : INK, 20);
-				String label = p.figure().isEmpty() ? "STEP " + (i + 1) : p.figure();
+				String label = fits(p.figure(), pw - 16, 11, "STEP " + (i + 1));
 				tx(x + 32, 256, pw - 16, label, 15, 11, 1, 800, on ? accentOnWhite() : WHITE, "center", 1.3);
 				int y = 330;
 				y += tx(x + 24, y, w - 48, p.head(), 28, 16, 2, 800, ink, "left", 1.25);
@@ -2408,7 +2415,8 @@ final class SlideLayouts {
 			int n = s.points().size();
 			int w = (1152 - 20 * (n - 1)) / n;
 			for (Point p : s.points()) {
-				int extra = p.figure().isEmpty() ? 0 : fit(p.head(), w - 10, 26, 16, 2, 700, false).height(1.3) + 10;
+				int extra = fits(p.figure(), w - 48, 14, "").isEmpty() ? 0
+						: fit(p.head(), w - 10, 26, 16, 2, 700, false).height(1.3) + 10;
 				if (top + 128 + extra + fit(p.body(), w - 20, 18, 13, 5, 400, false).height(1.7) > 650) {
 					return false;
 				}
@@ -2421,13 +2429,13 @@ final class SlideLayouts {
 				String ink = Theme.readable(fill);
 				rect(x, top, w, 96, fill);
 				tx(x + 24, top + 16, w - 48, "STEP " + (i + 1), 14, 12, 1, 800, last ? ink : goldOn(fill), "left", 1.4);
-				String label = p.figure().isEmpty() ? p.head() : p.figure();
-				tx(x + 24, top + 42, w - 48, label, 26, 14, 1, 700, ink, "left", 1.3);
+				String figure = fits(p.figure(), w - 48, 14, "");
+				tx(x + 24, top + 42, w - 48, figure.isEmpty() ? p.head() : figure, 26, 14, 1, 700, ink, "left", 1.3);
 				if (i < n - 1) {
 					rect(x + w, top + 44, 20, 8, t.accent2());
 				}
 				int y = top + 128;
-				if (!p.figure().isEmpty()) {
+				if (!figure.isEmpty()) {
 					y += tx(x, y, w - 10, p.head(), 26, 16, 2, 700, t.ink(), "left", 1.3) + 10;
 				}
 				tx(x, y, w - 20, p.body(), 18, 13, 5, 400, t.body(), "left", 1.7);
