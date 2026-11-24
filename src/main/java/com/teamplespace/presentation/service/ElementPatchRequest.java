@@ -57,7 +57,8 @@ public record ElementPatchRequest(long generation, long baseVersion, UUID editGr
 				geometry(patch.get("geometry")), content, style);
 	}
 
-	private static Geometry geometry(JsonNode node) {
+	// 아래 검사는 같은 패키지의 다른 저장 명령도 쓴다
+	static Geometry geometry(JsonNode node) {
 		if (node == null) {
 			return null;
 		}
@@ -81,14 +82,14 @@ public record ElementPatchRequest(long generation, long baseVersion, UUID editGr
 		return value;
 	}
 
-	private static long version(JsonNode node) {
+	static long version(JsonNode node) {
 		require(node != null && node.isIntegralNumber() && node.canConvertToLong());
 		long value = node.asLong();
 		require(value >= 1 && value <= 9007199254740991L);
 		return value;
 	}
 
-	private static UUID uuid(JsonNode node) {
+	static UUID uuid(JsonNode node) {
 		try {
 			return UUID.fromString(string(node));
 		}
@@ -97,17 +98,17 @@ public record ElementPatchRequest(long generation, long baseVersion, UUID editGr
 		}
 	}
 
-	private static String string(JsonNode node) {
+	static String string(JsonNode node) {
 		require(node != null && node.isString());
 		return node.asString();
 	}
 
-	private static void requireObject(JsonNode node, Set<String> allowed) {
+	static void requireObject(JsonNode node, Set<String> allowed) {
 		require(node != null && node.isObject());
 		node.properties().forEach(entry -> require(allowed.contains(entry.getKey())));
 	}
 
-	private static void require(boolean condition) {
+	static void require(boolean condition) {
 		if (!condition) {
 			throw new ApiException(ErrorCode.VALIDATION_FAILED);
 		}

@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -366,33 +365,6 @@ class EditorHttpTests extends HttpIntegrationSupport {
 			}
 			throw new IllegalStateException(name + " 신호를 받기 전에 연결이 끝났다");
 		}).get(10, TimeUnit.SECONDS);
-	}
-
-	// 지정한 이벤트를 받거나 연결이 끝날 때까지 읽고 연결을 닫는다
-	private List<Map<String, String>> messages(HttpResponse<Stream<String>> response, String lastId) throws Exception {
-		try (Stream<String> lines = response.body()) {
-			return CompletableFuture.supplyAsync(() -> {
-				List<Map<String, String>> messages = new ArrayList<>();
-				Map<String, String> current = new LinkedHashMap<>();
-				var iterator = lines.iterator();
-				boolean done = false;
-				while (!done && iterator.hasNext()) {
-					String line = iterator.next();
-					int colon = line.indexOf(':');
-					if (line.isEmpty()) {
-						if (current.containsKey("event")) {
-							messages.add(current);
-							done = current.get("id") != null && current.get("id").equals(lastId);
-						}
-						current = new LinkedHashMap<>();
-					}
-					else if (colon > 0) {
-						current.put(line.substring(0, colon), line.substring(colon + 1).strip());
-					}
-				}
-				return messages;
-			}).get(10, TimeUnit.SECONDS);
-		}
 	}
 
 }
