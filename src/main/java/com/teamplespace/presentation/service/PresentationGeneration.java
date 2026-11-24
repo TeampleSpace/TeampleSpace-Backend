@@ -60,10 +60,11 @@ public class PresentationGeneration implements JobHandler {
 
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
-	private static final String PROMPT_VERSION = "presentation-v2";
+	private static final String PROMPT_VERSION = "presentation-v3";
 	private static final Set<String> REQUEST_FIELDS = Set.of("outlineVersion", "designVersion", "sourceIds");
 	private static final Pattern COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
 	private static final String FONT = "Pretendard";
+	private static final String DISPLAY_FONT = "Gmarket Sans TTF";
 	private static final int SOURCE_TITLE_MAX = 18;
 	private static final int SOURCE_TITLES_SHOWN = 3;
 
@@ -204,7 +205,7 @@ public class PresentationGeneration implements JobHandler {
 
 		Deck deck = parseResult(provider.generate(input.model(), json.writeValueAsString(prompt)), outline.items().size());
 		try {
-			List<Slide> slides = SlideLayouts.build(json, deck, theme(input.snapshot().designSettings()), sourceLines);
+			List<Slide> slides = SlideLayouts.build(json, deck, theme(input.snapshot().designSettings(), deck.style()), sourceLines);
 			slides.forEach(slide -> slide.elements()
 				.forEach(element -> ElementRules.check(element.type(), element.content(), element.style(), null)));
 			return slides;
@@ -314,27 +315,33 @@ public class PresentationGeneration implements JobHandler {
 				rs.getString("title"), rs.getString("body"))).list();
 	}
 
-	// 템플릿은 미리보기의 배경색, 제목색과 템플릿별 강조색을, 직접 입력은 흰 배경과 대표색을 쓴다
-	private Theme theme(DesignService.Settings design) {
+	// 템플릿은 정해 둔 디자인 계열과 색을, 직접 입력은 제공자가 고른 계열에 대표색과 글꼴을 쓴다
+	private Theme theme(DesignService.Settings design, String style) {
 		if ("template".equals(design.mode())) {
 			JsonNode template = jdbc.sql("""
 					SELECT JSON_OBJECT('key', template_key, 'preview', preview, 'fonts', fonts)
 					FROM templates WHERE id = UUID_TO_BIN(?)
 					""").param(design.templateId().toString()).query(String.class).optional()
 				.map(json::readTree).orElse(json.createObjectNode());
-			String heading = color(template.path("preview").path("headingColor"), "#212735");
-			SlideLayouts.Style style = SlideLayouts.STYLES.getOrDefault(template.path("key").asString(""),
-					new SlideLayouts.Style(heading, "rule"));
-			return Theme.of(template.path("fonts").path(0).asString(FONT),
-					color(template.path("preview").path("backgroundColor"), "#FFFFFF"), heading, style.accent(),
-					style.motif());
+			SlideLayouts.Look look = SlideLayouts.TEMPLATES.get(template.path("key").asString(""));
+			if (look == null) {
+				look = SlideLayouts.custom("focus", color(template.path("preview").path("headingColor"), "#212735"));
+			}
+			String font = template.path("fonts").path(0).asString(FONT);
+			return Theme.of(font, display(font, look.style()), look);
 		}
 		// 프로젝트 글꼴은 화면이 글꼴 파일을 불러와 등록하는 이름으로 적는다
 		JsonNode custom = design.custom();
 		String font = custom.hasNonNull("fontAssetId") ? "ProjectFont-" + custom.get("fontAssetId").asString()
 				: custom.path("font").asString("");
-		String primary = color(custom.path("primaryColor"), "#2864E8");
-		return Theme.of(font.isBlank() ? FONT : font, "#FFFFFF", primary, primary, "rule");
+		font = font.isBlank() ? FONT : font;
+		SlideLayouts.Look look = SlideLayouts.custom(style, color(custom.path("primaryColor"), "#2864E8"));
+		return Theme.of(font, display(font, look.style()), look);
+	}
+
+	// 팝 계열은 기본 글꼴일 때만 제목에 Gmarket Sans를 쓴다
+	private static String display(String font, String style) {
+		return "pop".equals(style) && FONT.equals(font) ? DISPLAY_FONT : font;
 	}
 
 	private static String color(JsonNode node, String fallback) {
@@ -357,7 +364,7 @@ public class PresentationGeneration implements JobHandler {
 
 	private Deck parseResult(JsonNode generated, int itemCount) {
 		try {
-			OutlineInput.checkFields(generated, Set.of("title", "subtitle", "slides", "closing"), "presentation");
+			OutlineInput.checkFields(generated, Set.of("title", "subtitle", "style", "slides", "closing"), "presentation");
 			JsonNode slides = generated.path("slides");
 			if (!slides.isArray() || slides.size() != itemCount) {
 				throw OpenAiPresentationClient.invalidResult();
@@ -366,8 +373,11 @@ public class PresentationGeneration implements JobHandler {
 			for (JsonNode slide : slides) {
 				sections.add(section(slide));
 			}
+			// 모르는 계열은 기본 계열로 그린다
+			String style = generated.path("style").asString("");
 			return new Deck(line(generated.path("title"), SlideLayouts.DECK_TITLE_MAX),
-					line(generated.path("subtitle"), SlideLayouts.SUBTITLE_MAX), List.copyOf(sections),
+					line(generated.path("subtitle"), SlideLayouts.SUBTITLE_MAX),
+					SlideLayouts.STYLES.contains(style) ? style : "focus", List.copyOf(sections),
 					section(generated.path("closing")));
 		}
 		catch (ApiException ex) {
@@ -376,25 +386,31 @@ public class PresentationGeneration implements JobHandler {
 	}
 
 	private static Section section(JsonNode node) {
-		OutlineInput.checkFields(node, Set.of("layout", "title", "message", "points"), "slides");
+		OutlineInput.checkFields(node, Set.of("layout", "title", "message", "figure", "points"), "slides");
 		JsonNode points = node.path("points");
 		if (!points.isArray() || points.isEmpty() || points.size() > SlideLayouts.POINTS_MAX) {
 			throw OpenAiPresentationClient.invalidResult();
 		}
 		List<Point> lines = new ArrayList<>();
 		for (JsonNode point : points) {
-			OutlineInput.checkFields(point, Set.of("head", "body"), "points");
+			OutlineInput.checkFields(point, Set.of("head", "body", "figure"), "points");
 			lines.add(new Point(line(point.path("head"), SlideLayouts.HEAD_MAX),
-					line(point.path("body"), SlideLayouts.POINT_MAX)));
+					line(point.path("body"), SlideLayouts.POINT_MAX), optional(point.path("figure"), SlideLayouts.FIGURE_MAX)));
 		}
 		// 모르는 배치는 목록으로 그린다. 핵심 문장은 비어 있어도 된다
 		String layout = node.path("layout").asString("");
-		String message = node.path("message").asString("").strip().replaceAll("\\s+", " ");
-		if (message.codePointCount(0, message.length()) > SlideLayouts.MESSAGE_MAX) {
+		return new Section(SlideLayouts.LAYOUTS.contains(layout) ? layout : "list",
+				line(node.path("title"), SlideLayouts.SLIDE_TITLE_MAX), optional(node.path("message"), SlideLayouts.MESSAGE_MAX),
+				optional(node.path("figure"), SlideLayouts.FIGURE_MAX), List.copyOf(lines));
+	}
+
+	// 비어 있어도 되는 글. 공백을 한 칸으로 줄이고 길이를 넘으면 받지 않는다
+	private static String optional(JsonNode node, int max) {
+		String value = node.asString("").strip().replaceAll("\\s+", " ");
+		if (value.codePointCount(0, value.length()) > max) {
 			throw OpenAiPresentationClient.invalidResult();
 		}
-		return new Section(SlideLayouts.LAYOUTS.contains(layout) ? layout : "list",
-				line(node.path("title"), SlideLayouts.SLIDE_TITLE_MAX), message, List.copyOf(lines));
+		return value;
 	}
 
 	// 줄바꿈과 겹친 공백은 한 칸으로 줄이고 글상자에 넘치는 길이는 받지 않는다

@@ -25,6 +25,10 @@ public class OpenAiPresentationClient {
 			layout은 내용에 맞는 배치를 고르세요. 슬라이드마다 같은 배치만 반복하지 말고 내용이 다르면 다른 배치를 쓰세요.
 			cards는 대등한 요소 2개에서 4개, list는 설명이 긴 요소 나열, process는 순서가 있는 단계나 일정 3개에서 5개,
 			compare는 정확히 2개를 대조할 때(현재와 개선, 장점과 한계), statement는 강한 핵심 주장 하나와 근거 2개에서 3개일 때 씁니다.
+			figure는 그 슬라이드의 핵심 수치나 시기를 짧게 쓰고, 각 point의 figure는 그 항목의 수치나 시기를 12자 이내로 씁니다. 자료에 근거한 값이 없으면 빈 문자열로 두세요.
+			style은 발표 전체의 디자인 계열입니다. 디자인 지침과 주제 분위기에 맞게 하나를 고르세요.
+			focus는 깔끔한 기하학 면, editorial은 큰 글자와 선의 잡지형, pop은 밝고 둥근 제안형, data는 어두운 바탕의 데이터 보고,
+			natural은 차분한 자연색 보고, swiss는 격자와 굵은 글자, bento는 파스텔 타일의 기획형, corporate는 격식 있는 보고서형입니다.
 			closing은 발표를 정리하는 마지막 슬라이드로 title은 25자 이내, points는 2개에서 4개, layout은 list로 쓰세요.
 			각 슬라이드의 내용은 그 항목에 연결된 자료 번호의 내용만 근거로 삼고, 자료에 없는 수치나 사실을 지어내지 마세요.
 			민감한 계정 정보나 원문 전체를 결과에 복사하지 마세요.
@@ -33,10 +37,11 @@ public class OpenAiPresentationClient {
 			{
 			  "type":"object",
 			  "additionalProperties":false,
-			  "required":["title","subtitle","slides","closing"],
+			  "required":["title","subtitle","style","slides","closing"],
 			  "properties":{
 			    "title":{"type":"string"},
 			    "subtitle":{"type":"string"},
+			    "style":{"type":"string","enum":["focus","editorial","pop","data","natural","swiss","bento","corporate"]},
 			    "slides":{"type":"array","items":{"$ref":"#/$defs/slide"}},
 			    "closing":{"$ref":"#/$defs/slide"}
 			  },
@@ -44,19 +49,20 @@ public class OpenAiPresentationClient {
 			    "slide":{
 			      "type":"object",
 			      "additionalProperties":false,
-			      "required":["layout","title","message","points"],
+			      "required":["layout","title","message","figure","points"],
 			      "properties":{
 			        "layout":{"type":"string","enum":["cards","list","process","compare","statement"]},
 			        "title":{"type":"string"},
 			        "message":{"type":"string"},
+			        "figure":{"type":"string"},
 			        "points":{"type":"array","items":{"$ref":"#/$defs/point"}}
 			      }
 			    },
 			    "point":{
 			      "type":"object",
 			      "additionalProperties":false,
-			      "required":["head","body"],
-			      "properties":{"head":{"type":"string"},"body":{"type":"string"}}
+			      "required":["head","body","figure"],
+			      "properties":{"head":{"type":"string"},"body":{"type":"string"},"figure":{"type":"string"}}
 			    }
 			  }
 			}
