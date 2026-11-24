@@ -2,8 +2,10 @@ package com.teamplespace.collaboration.service;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -12,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.teamplespace.platform.security.Actor;
@@ -108,30 +111,39 @@ public class EventStreams {
 					close();
 					return;
 				}
+				// 한 번 조회한 이벤트와 커서 위치를 한 번에 써서 비운다
+				// 건마다 따로 쓰면 운영 경로의 중간 구간이 첫 건 뒤를 다음 연결 유지 신호까지 붙잡았다
+				Set<ResponseBodyEmitter.DataWithMediaType> batch = new LinkedHashSet<>();
+				String last = cursor;
 				for (JsonNode event : replay.events()) {
-					String id = event.get("eventId").asString();
-					emitter.send(SseEmitter.event()
-						.id(id)
+					last = event.get("eventId").asString();
+					batch.addAll(SseEmitter.event()
+						.id(last)
 						.name(event.get("type").asString())
-						.data(event, MediaType.APPLICATION_JSON));
-					cursor = id;
+						.data(event, MediaType.APPLICATION_JSON)
+						.build());
 				}
 				// 커서 위치는 다시 받을 필요가 없어 이벤트 순번 없이 보낸다
 				List<Presence.Cursor> now = presence.others(projectId, actor.userId());
-				if (!now.equals(cursors)) {
-					emitter.send(SseEmitter.event()
+				boolean moved = !now.equals(cursors);
+				if (moved) {
+					batch.addAll(SseEmitter.event()
 						.name("presence.updated")
-						.data(Map.of("projectId", projectId.toString(), "cursors", now), MediaType.APPLICATION_JSON));
+						.data(Map.of("projectId", projectId.toString(), "cursors", now), MediaType.APPLICATION_JSON)
+						.build());
+				}
+				if (batch.isEmpty() && ++idlePolls >= KEEP_ALIVE_POLLS) {
+					batch.addAll(SseEmitter.event().comment("keep-alive").build());
+				}
+				if (batch.isEmpty()) {
+					return;
+				}
+				emitter.send(batch);
+				cursor = last;
+				if (moved) {
 					cursors = now;
-					idlePolls = 0;
 				}
-				if (!replay.events().isEmpty()) {
-					idlePolls = 0;
-				}
-				else if (++idlePolls >= KEEP_ALIVE_POLLS) {
-					emitter.send(SseEmitter.event().comment("keep-alive"));
-					idlePolls = 0;
-				}
+				idlePolls = 0;
 			}
 			catch (IOException ex) {
 				// 클라이언트가 떠났다
