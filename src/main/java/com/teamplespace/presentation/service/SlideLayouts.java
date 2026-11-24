@@ -561,33 +561,42 @@ final class SlideLayouts {
 		List<Point> points = section.points();
 		int x = 540;
 		int width = WIDTH - MARGIN - x;
-		List<Fit> heads = new ArrayList<>();
-		List<Fit> bodies = new ArrayList<>();
-		int total = 0;
-		for (Point point : points) {
-			Fit head = fit(point.head(), width - 64, 24, 18, 2, true);
-			Fit body = fit(point.body(), width - 64, 19, 15, 3, false);
-			heads.add(head);
-			bodies.add(body);
-			total += head.height(1.3) + 8 + body.height(1.5);
+		List<ClosingRow> rows = closingRows(points, width - 64, 24, 19);
+		int total = rows.stream().mapToInt(ClosingRow::height).sum();
+		if (total + 20 * rows.size() > HEIGHT - 40) {
+			rows = closingRows(points, width - 64, 18, 15);
+			total = rows.stream().mapToInt(ClosingRow::height).sum();
 		}
-		int pad = Math.max(10, Math.min(28, (560 - total) / (points.size() * 2)));
-		int top = (HEIGHT - total - pad * 2 * points.size()) / 2;
-		for (int index = 0; index < points.size(); index++) {
-			Fit head = heads.get(index);
-			Fit body = bodies.get(index);
+		int pad = Math.min(28, Math.max(0, (HEIGHT - 40 - total) / (rows.size() * 2)));
+		int top = (HEIGHT - total - pad * 2 * rows.size()) / 2;
+		for (int index = 0; index < rows.size(); index++) {
+			ClosingRow point = rows.get(index);
+			Fit head = point.head();
+			Fit body = point.body();
 			int row = top + pad;
 			text(x, row, 48, 30, two(index + 1), 22, 800, mark, "left", 1.3);
-			text(x + 64, row, width - 64, head.height(1.3), points.get(index).head(), head.size(),
+			text(x + 64, row, width - 64, head.height(1.3), point.value().head(), head.size(),
 					700, ink, "left", 1.3);
-			text(x + 64, row + head.height(1.3) + 8, width - 64, body.height(1.5), points.get(index).body(), body.size(),
+			text(x + 64, row + head.height(1.3) + 8, width - 64, body.height(1.5), point.value().body(), body.size(),
 					400, soft, "left", 1.5);
-			top = row + head.height(1.3) + 8 + body.height(1.5) + pad;
-			if (index < points.size() - 1) {
+			top = row + point.height() + pad;
+			if (index < rows.size() - 1) {
 				rect(x, top, width, 1, rule, 0);
 			}
 		}
 		return new Slide("summary", out);
+	}
+
+	private record ClosingRow(Point value, Fit head, Fit body) {
+		int height() {
+			return head.height(1.3) + 8 + body.height(1.5);
+		}
+	}
+
+	private static List<ClosingRow> closingRows(List<Point> points, int width, int headSize, int bodySize) {
+		return points.stream().map(point -> new ClosingRow(point,
+				fit(point.head(), width, headSize, 18, 2, true),
+				fit(point.body(), width, bodySize, 15, 3, false))).toList();
 	}
 
 	// 요소

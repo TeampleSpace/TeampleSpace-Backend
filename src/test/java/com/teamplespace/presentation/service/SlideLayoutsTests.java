@@ -70,6 +70,23 @@ class SlideLayoutsTests {
 	}
 
 	@Test
+	void keepsFiveLongSummaryItemsInsideTheSlide() {
+		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#212735", "#285BDD", "rule");
+		String head = "가".repeat(SlideLayouts.HEAD_MAX);
+		for (String body : List.of("나".repeat(SlideLayouts.POINT_MAX),
+				String.join(" ", java.util.Collections.nCopies(4, "나".repeat(21))))) {
+			List<Point> points = java.util.Collections.nCopies(5, new Point(head, body));
+			Deck deck = new Deck("제목", "소개", List.of(section("list", 3)),
+					new Section("list", "정리", "마무리 문장", points));
+			Slide closing = SlideLayouts.build(json, deck, theme, sources(deck)).getLast();
+			check("긴 정리 다섯 항목", closing);
+			assertThat(closing.elements()).filteredOn(element -> element.type().equals("text")
+					&& element.content().get("text").asString().replaceAll("\\s", "").equals(body.replace(" ", "")))
+					.hasSize(5);
+		}
+	}
+
+	@Test
 	void picksLayoutByContentAndAvoidsRepeats() {
 		Theme theme = Theme.of("Pretendard", "#FFFFFF", "#212735", "#285BDD", "rule");
 		List<Section> sections = List.of(section("compare", 3), section("cards", 3), section("cards", 3),
