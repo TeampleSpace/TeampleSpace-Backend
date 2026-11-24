@@ -421,7 +421,7 @@ final class SlideLayouts {
 	private boolean list(Section section, int number, boolean message, boolean compact) {
 		int top = header(section, number, message);
 		List<Point> points = section.points();
-		int[][] sizes = { { 24, 20 }, { 22, 18 }, { 20, 16 }, { 18, 15 } };
+		int[][] sizes = { { 24, 20 }, { 22, 18 }, { 20, 16 }, { 18, 15 }, { 18, 14 } };
 		for (int attempt = 0; attempt < sizes.length; attempt++) {
 			int headSize = sizes[attempt][0];
 			int bodySize = sizes[attempt][1];
@@ -437,7 +437,7 @@ final class SlideLayouts {
 			}
 			int space = BOTTOM - top - content;
 			int pad = Math.min(36, space / (points.size() * 2));
-			if (pad < (compact ? 6 : 12)) {
+			if (pad < (compact ? 4 : 12)) {
 				continue;
 			}
 			int y = top;

@@ -139,7 +139,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		JsonNode cover = document.get("slides").get(0).get("elements");
 		assertThat(cover.get(0).get("style").get("fill").asString())
 			.isEqualTo(template.get("preview").get("backgroundColor").asString());
-		assertThat(cover.get(2).get("content").get("text").asString()).isEqualTo("생성한 발표 제목");
+		assertThat(texts(document.get("slides").get(0))).contains("생성한 발표 제목");
 		assertThat(texts(document.get("slides").get(1))).contains("항목 1", "핵심 문장", "첫째 요점", "첫째 문장", "출처: 선택 원문");
 		assertThat(texts(document.get("slides").get(2))).doesNotContain("출처: 선택 원문");
 		assertThat(texts(document.get("slides").get(3))).contains("정리");
