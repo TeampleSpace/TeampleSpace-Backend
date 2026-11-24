@@ -5,6 +5,11 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-24 생성 발표 자료의 배치 개선
+
+- 발표 생성 고정 입력의 `promptVersion`을 `presentation-v2`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
+- 생성한 슬라이드에 목차와 본문 배치별 `layoutId`(`agenda`, `cards`, `list`, `process`, `compare`, `statement`)가 생겼다. 제목 텍스트에는 줄바꿈 문자가 들어갈 수 있다
+
 ## 2026-11-23 편집 화면 커서 위치 공유 추가
 
 - 커서 위치 경로 `POST /v1/projects/{projectId}/presence`와 `PresenceUpdateRequest`, `PresenceUpdated` 형식을 추가
