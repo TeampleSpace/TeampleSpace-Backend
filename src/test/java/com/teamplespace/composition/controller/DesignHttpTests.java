@@ -133,6 +133,7 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		long designVersion = selected.get("version").asLong();
 		for (int position = 14; position < templates.size(); position++) {
 			JsonNode studio = templates.get(position);
+			assertThat(studio.get("layouts")).isEqualTo(catalog.get("allowedLayouts"));
 			JsonNode updated = owner.request("PUT", path, template(designVersion, studio), 200, UUID.randomUUID().toString());
 			assertThat(updated.get("templateId")).isEqualTo(studio.get("id"));
 			assertThat(updated.get("templateVersion")).isEqualTo(studio.get("version"));
