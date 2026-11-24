@@ -70,6 +70,26 @@ class DesignHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void everyTemplatePreviewIsDrawnWithGenerationLayouts() throws Exception {
+		Browser user = signup("미리보기 사용자");
+		JsonNode templates = user.get("/templates").get("items");
+		for (JsonNode template : templates) {
+			String id = template.get("id").asString();
+			JsonNode preview = user.get("/templates/" + id + "/preview");
+			assertSchema("stage-3-design.schema.json#/$defs/TemplatePreview", preview);
+			assertThat(preview.get("templateId").asString()).isEqualTo(id);
+			assertThat(preview.get("templateVersion").asLong()).isEqualTo(template.get("version").asLong());
+			var layouts = new ArrayList<String>();
+			preview.get("slides").forEach(slide -> layouts.add(slide.get("layoutId").asString()));
+			assertThat(layouts).as(template.get("key").asString()).startsWith("title").endsWith("summary").hasSize(8);
+		}
+		assertThat(new Browser().request("GET", "/templates/" + templates.get(0).get("id").asString() + "/preview",
+				null, 401).get("error").get("code").asString()).isEqualTo("UNAUTHENTICATED");
+		assertThat(user.request("GET", "/templates/" + UUID.randomUUID() + "/preview", null, 404)
+			.get("error").get("code").asString()).isEqualTo("NOT_FOUND");
+	}
+
+	@Test
 	void catalogAndBothModesAreValidatedAndRemembered() throws Exception {
 		Browser owner = signup("디자인 소유자");
 		Browser member = signup("디자인 팀원");

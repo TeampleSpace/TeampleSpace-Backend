@@ -139,6 +139,10 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		JsonNode cover = document.get("slides").get(0).get("elements");
 		assertThat(cover.get(0).get("style").get("fill").asString())
 			.isEqualTo(template.get("preview").get("backgroundColor").asString());
+		// 미리보기의 표지 장식은 생성한 발표와 같은 자리와 색이다
+		JsonNode previewCover = owner.get("/templates/" + template.get("id").asString() + "/preview").get("slides").get(0)
+			.get("elements");
+		assertThat(shapes(previewCover)).isNotEmpty().isEqualTo(shapes(cover));
 		assertThat(texts(document.get("slides").get(0))).contains("생성한 발표 제목");
 		assertThat(texts(document.get("slides").get(1))).contains("항목 1", "핵심 문장", "첫째 요점", "첫째 문장", "출처: 선택 원문");
 		assertThat(texts(document.get("slides").get(2))).doesNotContain("출처: 선택 원문");
@@ -242,6 +246,16 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		owner.request("PUT", "/projects/" + project + "/outline", Map.of("expectedVersion", version, "items", List.of(
 				Map.of("title", "항목 1", "summary", "근거가 있는 항목", "sourceIds", List.of(source)),
 				Map.of("title", "항목 2", "sourceIds", List.of()))), 200, UUID.randomUUID().toString());
+	}
+
+	private static List<String> shapes(JsonNode elements) {
+		List<String> shapes = new ArrayList<>();
+		elements.forEach(element -> {
+			if (element.get("type").asString().equals("shape")) {
+				shapes.add(element.get("geometry").toString() + element.get("style"));
+			}
+		});
+		return shapes;
 	}
 
 	private void saveTemplate(Browser owner, String project, long version, JsonNode choice) throws Exception {
