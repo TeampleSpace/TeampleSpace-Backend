@@ -223,6 +223,7 @@ const validateError = ajv.getSchema("api.schema.json#/$defs/ErrorResponse");
 | 기능 지원 정보 | `GET /v1/capabilities` | `Capabilities` | 제공자와 약관 설정을 반영한 HTTP 응답 구현 | 1단계 |
 | 세션 초기 정보 | `GET /v1/auth/bootstrap` | `AuthBootstrap` | 쿠키 기반 익명 및 인증 세션과 CSRF 토큰 발급 구현 | 1단계 |
 | 발표 템플릿 목록 | `GET /v1/templates` | `TemplateCatalog` | 공개 개정과 옵션 조회 | 3단계 |
+| 발표 템플릿 미리보기 | `GET /v1/templates/{templateId}/preview` | `TemplatePreview` | 발표 생성과 같은 규칙으로 그린 예시 슬라이드 | 3단계 |
 | 디자인 설정 조회 | `GET /v1/projects/{projectId}/design-settings` | `DesignSettings` | 저장한 선택과 개정 조회 | 3단계 |
 | 디자인 설정 저장 | `PUT /v1/projects/{projectId}/design-settings` | `DesignSettingsPutRequest`, `DesignSettings` | 버전 비교와 멱등 저장, [디자인 계약](stage-3-design.md) | 3단계 |
 | 발표 구성 조회 | `GET /v1/projects/{projectId}/outline` | `Outline` | 현재 구성과 고정된 자료 개정 조회 | 3단계 |

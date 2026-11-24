@@ -5,6 +5,11 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-25 템플릿 미리보기 슬라이드 조회 추가
+
+- `GET /v1/templates/{templateId}/preview` 경로와 `TemplatePreview`, `TemplatePreviewSlide`, `TemplatePreviewElement` 형식을 추가
+- 예시 발표를 발표 생성과 같은 배치와 테마 규칙으로 그린다. 요소에는 식별자와 버전이 없다
+
 ## 2026-11-24 발표 디자인 여덟 가지의 본문 배치
 
 - 발표 생성 고정 입력의 `promptVersion`을 `presentation-v3`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
