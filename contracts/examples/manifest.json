@@ -505,6 +505,11 @@
     "valid": true
   },
   {
+    "example": "template-preview.json",
+    "schema": "stage-3-design.schema.json#/$defs/TemplatePreview",
+    "valid": true
+  },
+  {
     "example": "design-template-put-request.json",
     "schema": "stage-3-design.schema.json#/$defs/DesignSettingsPutRequest",
     "valid": true
