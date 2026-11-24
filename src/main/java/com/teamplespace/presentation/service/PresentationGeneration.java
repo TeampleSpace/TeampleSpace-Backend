@@ -323,12 +323,7 @@ public class PresentationGeneration implements JobHandler {
 					FROM templates WHERE id = UUID_TO_BIN(?)
 					""").param(design.templateId().toString()).query(String.class).optional()
 				.map(json::readTree).orElse(json.createObjectNode());
-			SlideLayouts.Look look = SlideLayouts.TEMPLATES.get(template.path("key").asString(""));
-			if (look == null) {
-				look = SlideLayouts.custom("focus", color(template.path("preview").path("headingColor"), "#212735"));
-			}
-			String font = template.path("fonts").path(0).asString(FONT);
-			return Theme.of(font, display(font, look.style()), look);
+			return templateTheme(template);
 		}
 		// 프로젝트 글꼴은 화면이 글꼴 파일을 불러와 등록하는 이름으로 적는다
 		JsonNode custom = design.custom();
@@ -336,6 +331,16 @@ public class PresentationGeneration implements JobHandler {
 				: custom.path("font").asString("");
 		font = font.isBlank() ? FONT : font;
 		SlideLayouts.Look look = SlideLayouts.custom(style, color(custom.path("primaryColor"), "#2864E8"));
+		return Theme.of(font, display(font, look.style()), look);
+	}
+
+	// 템플릿 행의 key, preview, fonts로 테마를 만든다. 미리보기도 같은 규칙을 쓴다
+	static Theme templateTheme(JsonNode template) {
+		SlideLayouts.Look look = SlideLayouts.TEMPLATES.get(template.path("key").asString(""));
+		if (look == null) {
+			look = SlideLayouts.custom("focus", color(template.path("preview").path("headingColor"), "#212735"));
+		}
+		String font = template.path("fonts").path(0).asString(FONT);
 		return Theme.of(font, display(font, look.style()), look);
 	}
 

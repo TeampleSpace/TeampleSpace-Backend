@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.teamplespace.composition.service.DesignService;
 import com.teamplespace.identity.service.AuthService;
 import com.teamplespace.platform.error.ApiException;
+import com.teamplespace.presentation.service.TemplatePreviews;
 
 import jakarta.servlet.http.HttpServletRequest;
 import tools.jackson.databind.JsonNode;
@@ -23,16 +24,24 @@ public class DesignController {
 
 	private final AuthService auth;
 	private final DesignService designs;
+	private final TemplatePreviews previews;
 
-	public DesignController(AuthService auth, DesignService designs) {
+	public DesignController(AuthService auth, DesignService designs, TemplatePreviews previews) {
 		this.auth = auth;
 		this.designs = designs;
+		this.previews = previews;
 	}
 
 	@GetMapping("/templates")
 	DesignService.Catalog templates(HttpServletRequest request) {
 		auth.requireOnboarded(request);
 		return designs.catalog();
+	}
+
+	@GetMapping("/templates/{templateId}/preview")
+	TemplatePreviews.Preview preview(@PathVariable UUID templateId, HttpServletRequest request) {
+		auth.requireOnboarded(request);
+		return previews.preview(templateId);
 	}
 
 	@GetMapping("/projects/{projectId}/design-settings")
