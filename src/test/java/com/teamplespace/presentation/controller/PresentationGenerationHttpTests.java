@@ -38,6 +38,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 	private static final AtomicInteger calls = new AtomicInteger();
 	private static final AtomicInteger remainingFailures = new AtomicInteger();
 	private static final AtomicInteger slideCount = new AtomicInteger(2);
+	private static final AtomicReference<String> slideFigure = new AtomicReference<>("");
 	private static final AtomicReference<JsonNode> providerRequest = new AtomicReference<>();
 	// 비어 있으면 항목 번호 없이 slideCount만큼 보낸다
 	private static final AtomicReference<List<Integer>> itemNumbers = new AtomicReference<>(List.of());
@@ -65,6 +66,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		remainingFailures.set(0);
 		slideCount.set(2);
 		itemNumbers.set(List.of());
+		slideFigure.set("");
 		providerRequest.set(null);
 	}
 
@@ -189,6 +191,26 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void blanksOverlongOptionalFigure() throws Exception {
+		Browser owner = signup("긴 수치 소유자");
+		String project = createProject(owner, "긴 수치");
+		String source = memo(owner, project, "참고 원문");
+		saveOutline(owner, project, 1, source);
+		saveTemplate(owner, project, 1, owner.get("/templates").get("items").get(0));
+		slideFigure.set("2024년 3월부터 2025년 12월까지");
+
+		JsonNode queued = owner.request("POST", "/projects/" + project + "/presentation-jobs", request(2, 2, source), 202,
+				UUID.randomUUID().toString());
+		jobs.run(claim(queued));
+		assertThat(owner.get(path(queued)).get("status").asString()).isEqualTo("succeeded");
+		JsonNode slides = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
+			.get("slides");
+		for (JsonNode slide : slides) {
+			assertThat(texts(slide)).noneMatch(text -> text.contains("2025년 12월"));
+		}
+	}
+
+	@Test
 	void keepsNothingWhenTheResultIsInvalidOrInputsChange() throws Exception {
 		Browser owner = signup("생성 경합 소유자");
 		Browser member = signup("생성 경합 팀원");
@@ -203,7 +225,12 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		slideCount.set(3);
 		JsonNode invalid = owner.request("POST", url, request(2, 2, source), 202, UUID.randomUUID().toString());
 		jobs.run(claim(invalid));
+		// 응답이 매번 달라 남은 시도 횟수 안에서 다시 만든다
+		assertThat(owner.get(path(invalid)).get("status").asString()).isEqualTo("queued");
+		runUntilDone(invalid);
+		assertThat(calls.get()).isEqualTo(3);
 		assertFailure(owner, invalid, "JOB_PRESENTATION_INVALID_RESULT");
+		assertThat(owner.get(path(invalid)).get("error").get("retryable").asBoolean()).isTrue();
 		assertThat(presentations(project)).isZero();
 		slideCount.set(2);
 
@@ -213,7 +240,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		for (List<Integer> numbers : List.of(List.of(1, 2, 1), List.of(1, 1), List.of(2, 1), List.of(0, 1, 2), tooMany)) {
 			itemNumbers.set(numbers);
 			JsonNode rejected = owner.request("POST", url, request(2, 2, source), 202, UUID.randomUUID().toString());
-			jobs.run(claim(rejected));
+			runUntilDone(rejected);
 			assertFailure(owner, rejected, "JOB_PRESENTATION_INVALID_RESULT");
 		}
 		itemNumbers.set(List.of());
@@ -332,6 +359,14 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		assertThat(failed.get("error").get("code").asString()).isEqualTo(code);
 	}
 
+	// 테스트의 재시도 대기는 0초라 다시 대기열에 오른 작업을 바로 꺼낸다
+	private void runUntilDone(JsonNode job) {
+		for (var claim = jobs.claim("presentation-test"); claim.isPresent(); claim = jobs.claim("presentation-test")) {
+			assertThat(claim.get().job().id().toString()).isEqualTo(job.get("id").asString());
+			jobs.run(claim.get());
+		}
+	}
+
 	private String path(JsonNode job) {
 		return "/jobs/" + job.get("id").asString();
 	}
@@ -373,7 +408,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 					slide.put("item", numbered.get(index - 1));
 				}
 				slide.put("layout", index % 2 == 1 ? "cards" : "compare")
-					.put("title", "항목 " + index).put("message", "핵심 문장").put("figure", "");
+					.put("title", "항목 " + index).put("message", "핵심 문장").put("figure", slideFigure.get());
 				var points = slide.putArray("points");
 				points.addObject().put("head", "첫째 요점").put("body", "첫째 문장").put("figure", "312명");
 				points.addObject().put("head", "둘째 요점").put("body", "둘째 문장").put("figure", "");

@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +60,7 @@ public class PresentationGeneration implements JobHandler {
 	private record Evidence(Source reference, String title, String text) {
 	}
 
+	private static final Logger log = LoggerFactory.getLogger(PresentationGeneration.class);
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
 	private static final String PROMPT_VERSION = "presentation-v4";
@@ -217,7 +220,7 @@ public class PresentationGeneration implements JobHandler {
 			return slides;
 		}
 		catch (ApiException | IllegalArgumentException ex) {
-			throw OpenAiPresentationClient.invalidResult();
+			throw rejected("layout", ex.toString());
 		}
 	}
 
@@ -378,7 +381,7 @@ public class PresentationGeneration implements JobHandler {
 			OutlineInput.checkFields(generated, Set.of("title", "subtitle", "style", "slides", "closing"), "presentation");
 			JsonNode slides = generated.path("slides");
 			if (!slides.isArray() || slides.isEmpty() || slides.size() > Math.max(itemCount, CONTENT_SLIDES_MAX)) {
-				throw OpenAiPresentationClient.invalidResult();
+				throw rejected("slideCount", slides.size() + " of " + itemCount + " items");
 			}
 			// 항목 번호가 없는 응답은 항목마다 한 장씩 온 것으로 본다
 			boolean numbered = slides.get(0).has("item");
@@ -387,29 +390,29 @@ public class PresentationGeneration implements JobHandler {
 			for (int index = 0; index < slides.size(); index++) {
 				JsonNode slide = slides.get(index);
 				if (slide.has("item") != numbered || numbered && !slide.get("item").isInt()) {
-					throw OpenAiPresentationClient.invalidResult();
+					throw rejected("itemNumber", "slide " + index);
 				}
 				int item = numbered ? slide.get("item").asInt() : index + 1;
 				// 항목 순서대로 하나도 빠짐없이 와야 한다
 				int last = items.isEmpty() ? 0 : items.getLast();
 				if (item != last + 1 && (item != last || items.isEmpty())) {
-					throw OpenAiPresentationClient.invalidResult();
+					throw rejected("itemOrder", "slide " + index + " item " + item + " after " + last);
 				}
 				items.add(item);
 				sections.add(section(slide, true));
 			}
 			if (items.getLast() != itemCount) {
-				throw OpenAiPresentationClient.invalidResult();
+				throw rejected("itemMissing", "last " + items.getLast() + " of " + itemCount);
 			}
 			// 모르는 계열은 기본 계열로 그린다
 			String style = generated.path("style").asString("");
-			return new Deck(line(generated.path("title"), SlideLayouts.DECK_TITLE_MAX),
-					line(generated.path("subtitle"), SlideLayouts.SUBTITLE_MAX),
+			return new Deck(line(generated.path("title"), "deckTitle", SlideLayouts.DECK_TITLE_MAX),
+					line(generated.path("subtitle"), "subtitle", SlideLayouts.SUBTITLE_MAX),
 					SlideLayouts.STYLES.contains(style) ? style : "focus", List.copyOf(sections),
 					section(generated.path("closing"), false), List.copyOf(items));
 		}
 		catch (ApiException ex) {
-			throw OpenAiPresentationClient.invalidResult();
+			throw rejected("fields", ex.toString());
 		}
 	}
 
@@ -417,37 +420,48 @@ public class PresentationGeneration implements JobHandler {
 		OutlineInput.checkFields(node, body ? SLIDE_FIELDS : CLOSING_FIELDS, "slides");
 		JsonNode points = node.path("points");
 		if (!points.isArray() || points.isEmpty() || points.size() > SlideLayouts.POINTS_MAX) {
-			throw OpenAiPresentationClient.invalidResult();
+			throw rejected("points", String.valueOf(points.size()));
 		}
 		List<Point> lines = new ArrayList<>();
 		for (JsonNode point : points) {
 			OutlineInput.checkFields(point, Set.of("head", "body", "figure"), "points");
-			lines.add(new Point(line(point.path("head"), SlideLayouts.HEAD_MAX),
-					line(point.path("body"), SlideLayouts.POINT_MAX), optional(point.path("figure"), SlideLayouts.FIGURE_MAX)));
+			lines.add(new Point(line(point.path("head"), "head", SlideLayouts.HEAD_MAX),
+					line(point.path("body"), "body", SlideLayouts.POINT_MAX),
+					optional(point.path("figure"), "figure", SlideLayouts.FIGURE_MAX)));
 		}
 		// 모르는 배치는 목록으로 그린다. 핵심 문장은 비어 있어도 된다
 		String layout = node.path("layout").asString("");
 		return new Section(SlideLayouts.LAYOUTS.contains(layout) ? layout : "list",
-				line(node.path("title"), SlideLayouts.SLIDE_TITLE_MAX), optional(node.path("message"), SlideLayouts.MESSAGE_MAX),
-				optional(node.path("figure"), SlideLayouts.FIGURE_MAX), List.copyOf(lines));
+				line(node.path("title"), "slideTitle", SlideLayouts.SLIDE_TITLE_MAX),
+				optional(node.path("message"), "message", SlideLayouts.MESSAGE_MAX),
+				optional(node.path("figure"), "figure", SlideLayouts.FIGURE_MAX), List.copyOf(lines));
 	}
 
-	// 비어 있어도 되는 글. 공백을 한 칸으로 줄이고 길이를 넘으면 받지 않는다
-	private static String optional(JsonNode node, int max) {
+	// 비어 있어도 되는 글. 공백을 한 칸으로 줄이고 길이를 넘으면 비워서 생성을 계속한다
+	private static String optional(JsonNode node, String field, int max) {
 		String value = node.asString("").strip().replaceAll("\\s+", " ");
-		if (value.codePointCount(0, value.length()) > max) {
-			throw OpenAiPresentationClient.invalidResult();
+		int length = value.codePointCount(0, value.length());
+		if (length > max) {
+			log.info("발표 생성 결과의 {} 길이 {}자가 {}자를 넘어 비웠어요", field, length, max);
+			return "";
 		}
 		return value;
 	}
 
 	// 줄바꿈과 겹친 공백은 한 칸으로 줄이고 글상자에 넘치는 길이는 받지 않는다
-	private static String line(JsonNode node, int max) {
+	private static String line(JsonNode node, String field, int max) {
 		String value = OutlineInput.text(node, "presentation", Integer.MAX_VALUE).strip().replaceAll("\\s+", " ");
-		if (value.isEmpty() || value.codePointCount(0, value.length()) > max) {
-			throw OpenAiPresentationClient.invalidResult();
+		int length = value.codePointCount(0, value.length());
+		if (value.isEmpty() || length > max) {
+			throw rejected(field, length + " of " + max);
 		}
 		return value;
+	}
+
+	// 어느 검사에서 거절했는지만 남기고 생성된 글은 남기지 않는다
+	private static JobFailure rejected(String check, String detail) {
+		log.warn("발표 생성 결과를 거절했어요 check={} detail={}", check, detail);
+		return OpenAiPresentationClient.invalidResult();
 	}
 
 	private static JobFailure stale() {

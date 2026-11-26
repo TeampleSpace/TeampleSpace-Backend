@@ -129,8 +129,9 @@ public class OpenAiPresentationClient {
 		}
 	}
 
+	// 같은 입력이어도 응답이 매번 달라 남은 시도 횟수 안에서 다시 만든다
 	public static JobFailure invalidResult() {
-		return new JobFailure("JOB_PRESENTATION_INVALID_RESULT", "발표 자료 생성 결과를 확인하지 못했어요.", false);
+		return new JobFailure("JOB_PRESENTATION_INVALID_RESULT", "발표 자료 생성 결과를 확인하지 못했어요.", true);
 	}
 
 	private static JobFailure unavailable(boolean retryable) {
