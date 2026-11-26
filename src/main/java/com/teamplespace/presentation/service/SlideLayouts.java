@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 // 생성한 글을 1280 x 720 캔버스의 요소로 배치한다
-// 디자인은 피그마 Slide Layouts 페이지의 여덟 가지 계열을 따른다. 템플릿은 계열과 색을 고르는 데만 쓴다
+// 디자인은 피그마 Slide Layouts 페이지의 여덟 가지 계열을 따르고, 스튜디오 템플릿 네 종류는 PPT Templates 페이지의 전용 배치를 쓴다
 final class SlideLayouts {
 
 	record Point(String head, String body, String figure) {
@@ -80,10 +80,10 @@ final class SlideLayouts {
 			Map.entry("warm-story", new Look("pop", "#FFF1E3", "#2A1D18", "#D9663F", "#FFC95C")),
 			Map.entry("grid-analysis", new Look("corporate", "#FFFFFF", "#17241F", "#174C43", "#D9A928")),
 			Map.entry("bold-cover", new Look("swiss", "#FFFFFF", "#18181C", "#C62A1C", "#FCE25B")),
-			Map.entry("burgundy-editorial", new Look("editorial", "#F3F0E8", "#1E1A1B", "#682A35", "#682A35")),
-			Map.entry("tech-pitch", new Look("data", "#121819", "#FFFFFF", "#D5F45B", "#7FD3FF")),
-			Map.entry("open-campus", new Look("focus", "#FFFFFF", "#141A26", "#285BDD", "#FF6B4A")),
-			Map.entry("field-notes", new Look("natural", "#F2F4E9", "#1C2A22", "#254E40", "#C9734A")));
+			Map.entry("burgundy-editorial", new Look("burgundy", "#F3F0E8", "#1C1C1A", "#682A35", "#682A35")),
+			Map.entry("tech-pitch", new Look("signal", "#121819", "#FFFFFF", "#D5F45B", "#7FD3FF")),
+			Map.entry("open-campus", new Look("campus", "#F8F5EF", "#142E68", "#285BDD", "#FF6B4A")),
+			Map.entry("field-notes", new Look("fieldnotes", "#F2F4E9", "#254E40", "#254E40", "#E8D57D")));
 
 	// 템플릿 없이 만들 때 계열마다 대표색을 강조색으로 쓴다
 	static Look custom(String style, String primary) {
@@ -189,6 +189,10 @@ final class SlideLayouts {
 			case "swiss" -> new Swiss();
 			case "bento" -> new Bento();
 			case "corporate" -> new Corporate();
+			case "burgundy" -> new Burgundy();
+			case "signal" -> new Signal();
+			case "campus" -> new Campus();
+			case "fieldnotes" -> new Fieldnotes();
 			default -> new Focus();
 		};
 		design.json = json;
@@ -491,6 +495,497 @@ final class SlideLayouts {
 				}
 			}
 			return true;
+		}
+	}
+
+	// 스튜디오 템플릿 공통. 피그마 PPT Templates 페이지의 본문 배치를 따른다
+	// 위 왼쪽에 작은 라벨, 큰 제목과 설명, 아래 선 위에 출처와 쪽 번호를 둔다
+
+	private abstract static class Studio extends Design {
+
+		// 면 위의 옅은 선
+		String lineOn(String fill) {
+			return Theme.mix(fill, Theme.readable(fill), 0.2);
+		}
+
+		String label(int no) {
+			return "SECTION " + two(no);
+		}
+
+		int header(Section s, int no) {
+			tx(64, 48, 1100, label(no), 18, 16, 1, 600, t.accentText(), "left", 1.44);
+			int y = 84 + dx(64, 84, 1152, s.title(), 48, 32, 2, t.ink(), "left", 1.29);
+			if (!s.message().isEmpty()) {
+				y += 12 + tx(64, y + 12, 1152, s.message(), 24, 17, 2, 400, t.muted(), "left", 1.5);
+			}
+			return y + 48;
+		}
+
+		// 번호, 선, 소제목, 설명을 단으로 놓는다
+		@Override
+		boolean cards(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			int n = s.points().size();
+			int w = (1152 - 48 * (n - 1)) / n;
+			for (Point p : s.points()) {
+				if (top + 110 + fit(p.head(), w, 30, 20, 2, 600, false).height(1.4) + 16
+						+ fit(p.body(), w, 22, 15, 4, 400, false).height(1.5) > BOTTOM) {
+					return false;
+				}
+			}
+			for (int i = 0; i < n; i++) {
+				Point p = s.points().get(i);
+				int x = 64 + i * (w + 48);
+				tx(x, top, w, two(i + 1), 64, 64, 1, 700, t.accentText(), "left", 1.08);
+				rect(x, top + 86, w, 2, t.accent());
+				int h = tx(x, top + 110, w, p.head(), 30, 20, 2, 600, t.ink(), "left", 1.4);
+				tx(x, top + 126 + h, w, p.body(), 22, 15, 4, 400, t.body(), "left", 1.5);
+			}
+			return true;
+		}
+
+		// 한 줄 선 위에 단계 표시를 두고 단계마다 글을 단으로 놓는다
+		@Override
+		boolean process(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			int n = s.points().size();
+			int w = (1152 - 32 * (n - 1)) / n;
+			for (Point p : s.points()) {
+				if (top + 82 + fit(p.head(), w, 28, 18, 2, 600, false).height(1.4) + 14
+						+ fit(p.body(), w, 20, 14, 4, 400, false).height(1.5) > BOTTOM) {
+					return false;
+				}
+			}
+			rect(64, top + 8, 1152, 2, lineOn(t.bg()));
+			for (int i = 0; i < n; i++) {
+				Point p = s.points().get(i);
+				int x = 64 + i * (w + 32);
+				rect(x, top, 18, 18, t.accent());
+				tx(x, top + 44, w, "STEP " + two(i + 1), 18, 18, 1, 600, t.accentText(), "left", 1.44);
+				int h = tx(x, top + 82, w, p.head(), 28, 18, 2, 600, t.ink(), "left", 1.4);
+				tx(x, top + 96 + h, w, p.body(), 20, 14, 4, 400, t.body(), "left", 1.5);
+			}
+			return true;
+		}
+
+		@Override
+		boolean list(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			if (top > 420) {
+				return false;
+			}
+			ruled(s.points(), 64, 1152, top, BOTTOM, lineOn(t.bg()), t.ink(), t.body(), t.accentText());
+			return true;
+		}
+
+		// 왼쪽 굵은 선 옆에 핵심 문장, 오른쪽에 요점을 선으로 나눠 둔다
+		@Override
+		boolean statement(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			tx(64, 48, 1100, label(no) + "  " + s.title(), 18, 15, 1, 600, t.accentText(), "left", 1.44);
+			Fit f = fit(s.message(), 600, 48, 32, 5, 800, true);
+			if (140 + f.height(1.29) > BOTTOM) {
+				return false;
+			}
+			int y = 140;
+			for (Point p : s.points()) {
+				y += 26 + 12 + fit(p.body(), 460, 20, 14, 3, 400, false).height(1.5) + 32;
+			}
+			if (y > BOTTOM + 32) {
+				return false;
+			}
+			rect(64, 140, 5, Math.max(80, f.height(1.29)), t.accent());
+			put(102, 140, 600, s.message(), f, 800, t.ink(), "left", 1.29, true);
+			y = 140;
+			for (Point p : s.points()) {
+				tx(756, y, 460, p.head(), 18, 14, 1, 600, t.accentText(), "left", 1.44);
+				int b = tx(756, y + 38, 460, p.body(), 20, 14, 3, 400, t.ink(), "left", 1.5);
+				rect(756, y + 38 + b + 16, 460, 1, lineOn(t.bg()));
+				y += 38 + b + 32;
+			}
+			return true;
+		}
+
+		// 두 면을 나란히 놓고 각 면에 소제목과 설명을 둔다
+		@Override
+		boolean compare(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			String[] fills = { t.soft(), t.accent() };
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				int w = i == 0 ? 492 : 508;
+				if (top + 32 + 26 + 20 + fit(p.head(), w, 40, 24, 3, 800, true).height(1.29) + 24
+						+ fit(p.body(), w, 22, 15, 5, 400, false).height(1.5) + 32 > 616) {
+					return false;
+				}
+			}
+			rect(64, top, 556, 616 - top, fills[0]);
+			rect(644, top, 572, 616 - top, fills[1]);
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				int x = i == 0 ? 96 : 676;
+				int w = i == 0 ? 492 : 508;
+				String ink = Theme.readable(fills[i]);
+				String mark = i == 0 ? Theme.guard(t.accentText(), 4.5, ink, fills[0]) : t.onAccentSoft();
+				tx(x, top + 32, w, two(i + 1), 18, 18, 1, 600, mark, "left", 1.44);
+				int h = dx(x, top + 78, w, p.head(), 40, 24, 3, ink, "left", 1.29);
+				tx(x, top + 102 + h, w, p.body(), 22, 15, 5, 400, ink, "left", 1.5);
+			}
+			return true;
+		}
+
+		// 강조색 바탕에 큰 문장과 요점 단
+		@Override
+		void closing(Section s) {
+			closingOn(t.accent(), t.onAccent(), t.onAccentSoft(), "SUMMARY");
+			closingBody(s, t.accent(), t.onAccent(), t.onAccentSoft());
+		}
+
+		void closingOn(String fill, String ink, String soft, String label) {
+			rect(0, 0, WIDTH, HEIGHT, fill);
+			tx(64, 56, 1100, label, 18, 18, 1, 600, soft, "left", 1.44);
+		}
+
+		// 요점이 단으로 들어가면 큰 문장 아래에, 아니면 왼쪽 큰 문장과 오른쪽 목록으로 나눈다
+		void closingBody(Section s, String fill, String ink, String soft) {
+			String big = s.message().isEmpty() ? s.title() : s.message();
+			String line = Theme.mix(fill, ink, 0.4);
+			Fit wide = fit(big, 1152, 60, 30, 3, dweight(), true);
+			int y = 140 + wide.height(1.3) + 48;
+			if (s.points().isEmpty() || columnsFit(s.points(), y + 32, 690)) {
+				put(64, 140, 1152, big, wide, dweight(), ink, "left", 1.3, true);
+				if (!s.points().isEmpty()) {
+					rect(64, y, 1152, 1, line);
+					columns(s.points(), y + 32, ink, soft);
+				}
+				return;
+			}
+			dx(64, 140, 560, big, 56, 30, 5, ink, "left", 1.2);
+			ruled(s.points(), 700, 516, 140, 690, line, ink, soft, soft);
+		}
+
+		boolean columnsFit(List<Point> points, int top, int bottom) {
+			int w = (1152 - 32 * (points.size() - 1)) / points.size();
+			for (Point p : points) {
+				Fit h = fit(p.head(), w, 18, 14, 2, 600, false);
+				Fit b = fit(p.body(), w, 24, 14, 8, 600, false);
+				if (h.lines() > 2 || b.lines() > 8 || h.height(1.44) + 12 + b.height(1.4) > bottom - top) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		void columns(List<Point> points, int top, String ink, String soft) {
+			int w = (1152 - 32 * (points.size() - 1)) / points.size();
+			for (int i = 0; i < points.size(); i++) {
+				Point p = points.get(i);
+				int x = 64 + i * (w + 32);
+				int h = tx(x, top, w, p.head(), 18, 14, 2, 600, soft, "left", 1.44);
+				tx(x, top + 12 + h, w, p.body(), 24, 14, 8, 600, ink, "left", 1.4);
+			}
+		}
+
+		@Override
+		void footer(String source, int page) {
+			String fill = out.get(0).style().get("fill").asString();
+			rect(64, 650, 1152, 1, lineOn(fill));
+			String color = footColor();
+			if (source != null) {
+				tx(64, 664, 900, source, 16, 12, 1, 400, color, "left", 1.44);
+			}
+			tx(1016, 664, 200, two(page), 16, 16, 1, 400, color, "right", 1.44);
+		}
+	}
+
+	// 버건디 편집형. 아이보리 바탕, 버건디 선과 띠, 숫자를 크게 쓰는 보고서
+
+	private static final class Burgundy extends Studio {
+
+		@Override
+		void cover(String title, String subtitle) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			tx(64, 54, 1100, "TEAM REPORT", 18, 18, 1, 600, t.accentText(), "left", 1.44);
+			rect(64, 100, 1152, 1, t.accent());
+			Fit head = fit(title, 680, 72, 40, 4, 800, true);
+			put(64, 140, 680, title, head, 800, t.accentText(), "left", 1.15, true);
+			rect(776, 150, 1, 345, lineOn(t.bg()));
+			tx(824, 160, 392, subtitle, 28, 18, 6, 400, t.body(), "left", 1.5);
+			rect(0, 570, WIDTH, 150, t.accent());
+			tx(64, 620, 1152, "TEAM PRESENTATION", 24, 24, 1, 600, t.onAccent(), "left", 1.4);
+		}
+
+		@Override
+		void agenda(List<String> titles) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			dx(64, 86, 520, "Contents", 88, 88, 1, t.accentText(), "left", 1.14);
+			tx(64, 232, 460, "발표 순서", 30, 30, 1, 600, t.ink(), "left", 1.4);
+			int row = Math.min(125, 560 / titles.size());
+			for (int i = 0; i < titles.size(); i++) {
+				int y = 60 + i * row;
+				Fit f = fit(titles.get(i), 456, 30, 18, 2, 600, false);
+				tx(650, y + (row - 42) / 2, 100, two(i + 1), 30, 30, 1, 600, t.accentText(), "left", 1.4);
+				put(760, y + (row - f.height(1.4)) / 2, 456, titles.get(i), f, 600, t.ink(), "left", 1.4, false);
+				rect(650, y + row - 1, 566, 1, lineOn(t.bg()));
+			}
+		}
+
+		// 수치가 있으면 왼쪽에 크게 쓰고 오른쪽에 문장과 요점을 둔다
+		@Override
+		boolean statement(Section s, int no) {
+			String figure = s.figure().isEmpty() ? "" : fits(s.figure(), 490, 72, "");
+			if (figure.isEmpty()) {
+				return super.statement(s, no);
+			}
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			tx(64, 54, 1100, label(no) + "  " + s.title(), 18, 15, 1, 600, t.accentText(), "left", 1.44);
+			int y = 108 + dx(64, 108, 1120, s.message(), 48, 30, 2, t.ink(), "left", 1.29) + 48;
+			if (y > 330) {
+				return false;
+			}
+			int right = y;
+			for (Point p : s.points()) {
+				right += 52 + fit(p.body(), 570, 20, 14, 3, 400, false).height(1.5) + 16;
+			}
+			if (right > BOTTOM) {
+				return false;
+			}
+			tx(64, y, 490, figure, 120, 72, 1, 400, t.accentText(), "left", 1.1);
+			rect(602, y, 614, 1, lineOn(t.bg()));
+			for (Point p : s.points()) {
+				int h = tx(630, y + 16, 570, p.head(), 26, 18, 1, 600, t.ink(), "left", 1.4);
+				int b = tx(630, y + 24 + h, 570, p.body(), 20, 14, 3, 400, t.muted(), "left", 1.5);
+				y += 24 + h + b + 16;
+			}
+			return true;
+		}
+
+		// 흰 면을 오른쪽에 깔고 두 쪽을 나란히 비교한다
+		@Override
+		boolean compare(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				if (top + 32 + fit(p.head(), 420, 30, 20, 2, 600, false).height(1.4) + 32
+						+ fit(p.body(), 420, 24, 15, 6, 400, false).height(1.5) > 600) {
+					return false;
+				}
+			}
+			rect(700, top, 516, 600 - top + 24, Theme.LIGHT);
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				int x = i == 0 ? 64 : 732;
+				String fill = i == 0 ? t.bg() : Theme.LIGHT;
+				String head = Theme.guard(i == 0 ? t.muted() : t.accentText(), 4.5, t.ink(), fill);
+				int h = tx(x, top + 24, 420, p.head(), 30, 20, 2, 600, head, "left", 1.4);
+				rect(x, top + 40 + h, 420, 1, lineOn(t.bg()));
+				tx(x, top + 56 + h, 420, p.body(), 24, 15, 6, 400, t.ink(), "left", 1.5);
+			}
+			return true;
+		}
+
+		@Override
+		void closing(Section s) {
+			closingOn(t.accent(), t.onAccent(), t.onAccentSoft(), "NEXT STEP");
+			closingBody(s, t.accent(), t.onAccent(), t.onAccentSoft());
+		}
+	}
+
+	// 테크 피치. 차콜 바탕, 라임 강조, 큰 숫자와 단계 흐름
+
+	private static final class Signal extends Studio {
+
+		@Override
+		void cover(String title, String subtitle) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			tx(64, 52, 1100, "TEAM PRESENTATION / PITCH", 18, 18, 1, 600, t.muted(), "left", 1.44);
+			int y = 150 + dx(64, 150, 1100, title, 80, 44, 3, t.ink(), "left", 1.12) + 40;
+			tx(64, y, 900, subtitle, 36, 22, Math.max(1, Math.min(3, (580 - y) / 46)), 700, t.accentText(), "left",
+					1.29);
+			rect(64, 594, 1152, 2, lineOn(t.bg()));
+			tx(64, 630, 900, "함께 만든 발표", 20, 20, 1, 400, t.muted(), "left", 1.5);
+		}
+
+		// 네 개까지는 한 줄, 그보다 많으면 세 개씩 두 줄로 놓는다
+		@Override
+		void agenda(List<String> titles) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			dx(64, 64, 1152, "오늘 이야기할 것", 48, 48, 1, t.ink(), "left", 1.29);
+			int n = titles.size();
+			int perRow = n <= 4 ? n : 3;
+			boolean single = n <= 4;
+			int w = (1152 - 52 * (perRow - 1)) / perRow;
+			for (int i = 0; i < n; i++) {
+				int x = 64 + i % perRow * (w + 52);
+				int y = single ? 266 : 190 + i / perRow * 230;
+				int number = single ? 80 : 56;
+				tx(x, y, w, two(i + 1), number, number, 1, 700, t.accentText(), "left", 1.08);
+				rect(x, y + number + 32, w, 1, lineOn(t.bg()));
+				tx(x, y + number + 56, w, titles.get(i), single ? 30 : 24, 16, single ? 4 : 2, 600, t.ink(), "left",
+						1.4);
+			}
+		}
+
+		// 왼쪽은 바탕에, 오른쪽은 라임 면에 두고 수치가 있으면 크게 쓴다
+		@Override
+		boolean compare(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				String figure = fits(p.figure(), 470, 48, "");
+				int need = 28 + fit(p.head(), 470, 30, 20, 2, 600, false).height(1.4) + 24
+						+ (figure.isEmpty() ? 0 : 112) + fit(p.body(), 470, 24, 15, 5, 400, false).height(1.5) + 28;
+				if (top + need > 616) {
+					return false;
+				}
+			}
+			rect(656, top, 560, 616 - top, t.accent());
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				int x = i == 0 ? 64 : 696;
+				String ink = i == 0 ? t.ink() : t.onAccent();
+				String soft = i == 0 ? t.muted() : t.onAccentSoft();
+				int y = top + 28;
+				y += tx(x, y, 470, p.head(), 30, 20, 2, 600, soft, "left", 1.4) + 24;
+				String figure = fits(p.figure(), 470, 48, "");
+				if (!figure.isEmpty()) {
+					y += tx(x, y, 470, figure, 96, 48, 1, 400, ink, "left", 1.12) + 12;
+				}
+				tx(x, y, 470, p.body(), 24, 15, 5, 400, ink, "left", 1.5);
+			}
+			return true;
+		}
+
+		@Override
+		void closing(Section s) {
+			closingOn(t.accent(), t.onAccent(), t.onAccentSoft(), "LET’S BUILD TOGETHER");
+			closingBody(s, t.accent(), t.onAccent(), t.onAccentSoft());
+		}
+	}
+
+	// 오픈 캠퍼스. 코발트와 코랄, 큰 제목의 수업 발표
+
+	private static final class Campus extends Studio {
+
+		@Override
+		void cover(String title, String subtitle) {
+			rect(0, 0, WIDTH, HEIGHT, t.accent());
+			rect(944, 0, 336, 720, t.accent2());
+			tx(64, 52, 800, "CAMPUS PROJECT", 18, 18, 1, 600, t.onAccentSoft(), "left", 1.44);
+			int y = 180 + dx(64, 180, 840, title, 80, 44, 3, t.onAccent(), "left", 1.25) + 48;
+			tx(64, y, 820, subtitle, 30, 20, Math.max(1, Math.min(3, (630 - y) / 42)), 600, t.onAccent(), "left",
+					1.4);
+			tx(992, 78, 240, "TEAM", 18, 18, 1, 600, t.onAccent2(), "left", 1.44);
+			tx(992, 150, 240, String.valueOf(deck.topics().size()), 140, 140, 1, 400, t.onAccent2(), "left", 1.12);
+			tx(992, 320, 240, "가지 주제", 24, 24, 1, 400, t.onAccent2(), "left", 1.5);
+		}
+
+		@Override
+		void agenda(List<String> titles) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			dx(64, 74, 470, "발표 순서", 64, 64, 1, t.ink(), "left", 1.28);
+			tx(64, 270, 430, "우리 팀이 던진 질문과\n찾은 답을 소개합니다.", 24, 24, 2, 400, t.ink(), "left", 1.5);
+			int row = Math.min(132, 540 / titles.size());
+			for (int i = 0; i < titles.size(); i++) {
+				int y = 70 + i * row;
+				rect(568, y + 8, 6, row - 24, i % 2 == 0 ? t.accent() : t.accent2());
+				tx(602, y + (row - 16 - 42) / 2, 88, two(i + 1), 30, 30, 1, 600, t.accentText(), "left", 1.4);
+				Fit f = fit(titles.get(i), 496, 30, 18, 2, 600, false);
+				put(720, y + (row - 16 - f.height(1.4)) / 2, 496, titles.get(i), f, 600, t.ink(), "left", 1.4, false);
+				rect(600, y + row - 1, 616, 1, t.soft());
+			}
+		}
+
+		// 위에 코랄 띠, 큰 문장, 아래 코발트 띠에 요점. 요점이 띠에 넘치면 공통 마무리를 쓴다
+		@Override
+		void closing(Section s) {
+			if (!s.points().isEmpty() && !columnsFit(s.points(), 506, 696)) {
+				super.closing(s);
+				return;
+			}
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			rect(0, 0, WIDTH, 22, t.accent2());
+			tx(64, 70, 1100, "OUR NEXT STEP", 18, 18, 1, 600, t.accentText(), "left", 1.44);
+			String big = s.message().isEmpty() ? s.title() : s.message();
+			dx(64, 150, 1152, big, 72, 36, 3, t.accentText(), "left", 1.25);
+			rect(0, 470, WIDTH, 250, t.accent());
+			if (s.points().isEmpty()) {
+				tx(64, 586, 1152, "질문과 의견을 듣겠습니다.", 30, 30, 1, 600, t.onAccent(), "left", 1.4);
+				return;
+			}
+			columns(s.points(), 506, t.onAccent(), t.onAccentSoft());
+		}
+	}
+
+	// 필드 노트. 포레스트와 아이보리, 인터뷰와 비교표의 리서치 발표
+
+	private static final class Fieldnotes extends Studio {
+
+		@Override
+		void cover(String title, String subtitle) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			rect(0, 0, 26, 720, t.accent());
+			tx(64, 52, 1100, "RESEARCH JOURNAL", 18, 18, 1, 600, t.accentText(), "left", 1.44);
+			rect(64, 102, 1152, 1, lineOn(t.bg()));
+			dx(64, 150, 540, title, 64, 34, 5, t.accentText(), "left", 1.2);
+			rect(638, 148, 1, 430, lineOn(t.bg()));
+			tx(690, 174, 526, subtitle, 28, 18, 7, 400, t.ink(), "left", 1.5);
+			tx(64, 654, 900, "관찰, 기록, 해석, 제안", 20, 20, 1, 400, t.ink(), "left", 1.5);
+		}
+
+		@Override
+		void agenda(List<String> titles) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			rect(0, 0, 416, 720, t.accent());
+			dx(56, 110, 320, "발표의\n흐름", 56, 56, 2, t.onAccent(), "left", 1.36);
+			tx(56, 472, 320, "질문에서\n제안까지", 24, 24, 2, 400, t.onAccentSoft(), "left", 1.5);
+			int row = Math.min(140, 600 / titles.size());
+			for (int i = 0; i < titles.size(); i++) {
+				int y = 60 + i * row;
+				tx(480, y + (row - 42) / 2, 100, two(i + 1), 30, 30, 1, 600, t.accentText(), "left", 1.4);
+				Fit f = fit(titles.get(i), 616, 30, 18, 2, 600, false);
+				put(600, y + (row - f.height(1.4)) / 2, 616, titles.get(i), f, 600, t.ink(), "left", 1.4, false);
+				rect(480, y + row - 1, 736, 1, lineOn(t.bg()));
+			}
+		}
+
+		// 진한 머리 행 아래에 두 대안을 같은 칸으로 놓는 비교표
+		@Override
+		boolean compare(Section s, int no) {
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = header(s, no);
+			int heads = 0;
+			int bodies = 0;
+			for (Point p : s.points().subList(0, 2)) {
+				heads = Math.max(heads, fit(p.head(), 528, 24, 16, 2, 600, false).height(1.44));
+				bodies = Math.max(bodies, fit(p.body(), 528, 22, 15, 7, 400, false).height(1.5));
+			}
+			if (top + 36 + heads + 28 + bodies + 16 > BOTTOM) {
+				return false;
+			}
+			rect(64, top, 1152, heads + 36, t.accent());
+			for (int i = 0; i < 2; i++) {
+				Point p = s.points().get(i);
+				int x = 88 + i * 576;
+				tx(x, top + 18, 528, p.head(), 24, 16, 2, 600, t.onAccent(), "left", 1.44);
+				tx(x, top + heads + 64, 528, p.body(), 22, 15, 7, 400, t.ink(), "left", 1.5);
+				rect(64 + i * 576, top + heads + 64 + bodies + 16, 576, 1, lineOn(t.bg()));
+			}
+			rect(640, top + heads + 36, 1, bodies + 44, lineOn(t.bg()));
+			return true;
+		}
+
+		@Override
+		void closing(Section s) {
+			String fill = t.accent();
+			closingOn(fill, t.onAccent(), t.onAccentSoft(), "FROM RESEARCH TO ACTION");
+			closingBody(s, fill, t.onAccent(), t.onAccentSoft());
 		}
 	}
 
