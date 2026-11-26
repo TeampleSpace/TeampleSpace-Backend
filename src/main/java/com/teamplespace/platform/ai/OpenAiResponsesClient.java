@@ -75,6 +75,17 @@ public class OpenAiResponsesClient {
 
 	// 응답이 긴 요청은 기본 대기 시간보다 길게 기다린다
 	public JsonNode generate(URI endpoint, String apiKey, ObjectNode request, Duration responseTimeout) {
+		JsonNode response = response(endpoint, apiKey, request, responseTimeout);
+		try {
+			return output(response);
+		}
+		catch (JacksonException ex) {
+			throw new Failure(true, false);
+		}
+	}
+
+	// 출력 글 말고 응답 전체가 필요한 요청에 쓴다. 출력 글은 output으로 읽는다
+	public JsonNode response(URI endpoint, String apiKey, ObjectNode request, Duration responseTimeout) {
 		var post = new HttpPost(endpoint);
 		if (responseTimeout != null) {
 			post.setConfig(RequestConfig.copy(defaults).setResponseTimeout(Timeout.of(responseTimeout)).build());
@@ -95,7 +106,7 @@ public class OpenAiResponsesClient {
 				if (body.length > MAX_RESPONSE_BYTES) {
 					throw new Failure(true, false);
 				}
-				return output(json.readTree(body));
+				return json.readTree(body);
 			});
 		}
 		catch (JacksonException ex) {
@@ -106,7 +117,7 @@ public class OpenAiResponsesClient {
 		}
 	}
 
-	private JsonNode output(JsonNode response) {
+	public JsonNode output(JsonNode response) {
 		if (response != null && "completed".equals(response.path("status").asString(""))) {
 			for (JsonNode message : response.path("output")) {
 				if ("message".equals(message.path("type").asString(""))) {
