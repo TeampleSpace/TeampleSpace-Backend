@@ -46,6 +46,11 @@ class LinkFetcherTests {
 				<body><nav>메뉴</nav><h1>감축 사례</h1><p>여러 대학이 다회용컵 반납함을 늘렸다.</p>
 				<script>alert('숨은 스크립트')</script><p>반납 동선을 줄이자<br>이용이 늘었다.</p></body></html>
 				""".getBytes(StandardCharsets.UTF_8)));
+		server.createContext("/links", exchange -> respond(exchange, 200, "text/html; charset=utf-8", """
+				<html><body><p>자세한 내용은 <a href="/guide">반납 안내</a>를 보세요.</p>
+				<p><a href="https://example.com/a">https://example.com/a</a> <a href="mailto:team@example.com">문의</a>
+				<a href="javascript:alert(1)">위험</a> <a href="https://example.com/img"><img alt=""></a></p></body></html>
+				""".getBytes(StandardCharsets.UTF_8)));
 		server.createContext("/euc-kr", exchange -> respond(exchange, 200, "text/html",
 				"<html><head><meta charset=\"euc-kr\"><title>한글 문서</title></head><body><p>완성형 한글 본문</p></body></html>"
 					.getBytes(Charset.forName("EUC-KR"))));
@@ -250,6 +255,16 @@ class LinkFetcherTests {
 		// 메뉴, 스타일, 스크립트는 본문에 넣지 않는다
 		assertThat(page.text()).doesNotContain("메뉴").doesNotContain("숨은 스크립트").doesNotContain("color");
 		assertThat(page.url()).isEqualTo(base + "/page");
+	}
+
+	@Test
+	void keepsLinkAddressesNextToTheirText() {
+		String text = local.fetch(base + "/links").text();
+		assertThat(text).contains("반납 안내 (" + base + "/guide)를 보세요.")
+			.contains("문의 (mailto:team@example.com)")
+			.contains("https://example.com/img")
+			.doesNotContain("https://example.com/a (https://example.com/a)")
+			.doesNotContain("javascript");
 	}
 
 	@Test
