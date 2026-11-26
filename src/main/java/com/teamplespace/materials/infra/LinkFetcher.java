@@ -230,6 +230,8 @@ public class LinkFetcher {
 			document.select("script,style,noscript,template,svg,iframe,nav,header,footer,aside,form").remove();
 			// 링크 글자 뒤에 실제 주소를 남긴다. 글자가 없거나 주소와 같으면 주소만 쓴다
 			for (var anchor : document.select("a[href]")) {
+				// 같은 문서 안으로 이동하는 링크는 주소가 의미 없어 남기지 않는다
+				if (anchor.attr("href").strip().startsWith("#")) continue;
 				String url = MaterialAnalysis.linkTarget(anchor.absUrl("href"));
 				if (url == null) continue;
 				String label = anchor.text().strip();
