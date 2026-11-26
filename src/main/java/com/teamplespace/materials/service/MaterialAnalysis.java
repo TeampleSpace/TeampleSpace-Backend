@@ -206,21 +206,48 @@ public class MaterialAnalysis implements JobHandler {
 		for (PDAnnotation annotation : page.getAnnotations()) {
 			if (!(annotation instanceof PDAnnotationLink link) || !(link.getAction() instanceof PDActionURI action)) continue;
 			String url = linkTarget(action.getURI());
-			if (url == null || seen.contains(url) || pageText.contains(url)) continue;
+			if (url == null || seen.contains(url) || shown(pageText, url)) continue;
 			seen.add(url);
 			String label = "";
 			PDRectangle rect = link.getRectangle();
 			if (rect != null) {
 				// 주석 좌표는 아래가 원점이고 영역 추출은 위가 원점이다
 				PDFTextStripperByArea area = new PDFTextStripperByArea();
-				area.addRegion("link", new java.awt.geom.Rectangle2D.Float(rect.getLowerLeftX() - box.getLowerLeftX(),
-						box.getUpperRightY() - rect.getUpperRightY(), rect.getWidth(), rect.getHeight()));
+				area.setSortByPosition(true);
+				area.addRegion("link", region(rect, box, page.getRotation()));
 				area.extractRegions(page);
 				label = clean(area.getTextForRegion("link")).replaceAll("\\s+", " ");
 			}
 			lines.add(label.isEmpty() || label.equals(url) ? url : label + " (" + url + ")");
 		}
 		return String.join("\n", lines);
+	}
+
+	// 주석 영역을 글자 위치와 같은 좌표로 바꾼다. 글자 위치는 쪽 회전을 반영하고 위가 원점이다
+	static java.awt.geom.Rectangle2D region(PDRectangle rect, PDRectangle box, int rotation) {
+		float width = box.getWidth();
+		float height = box.getHeight();
+		float[][] corners = { { rect.getLowerLeftX(), rect.getLowerLeftY() }, { rect.getUpperRightX(), rect.getUpperRightY() } };
+		java.awt.geom.Rectangle2D.Float area = null;
+		for (float[] corner : corners) {
+			float x = corner[0] - box.getLowerLeftX();
+			float y = corner[1] - box.getLowerLeftY();
+			float[] point = switch (((rotation % 360) + 360) % 360) {
+				case 90 -> new float[] { y, x };
+				case 180 -> new float[] { width - x, y };
+				case 270 -> new float[] { height - y, width - x };
+				default -> new float[] { x, height - y };
+			};
+			if (area == null) area = new java.awt.geom.Rectangle2D.Float(point[0], point[1], 0, 0);
+			else area.add(point[0], point[1]);
+		}
+		return area;
+	}
+
+	// 본문에 주소 전체가 그대로 보이는지 확인한다. 더 긴 주소의 앞부분인 경우는 다른 주소로 본다
+	static boolean shown(String text, String url) {
+		return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(url) + "(?=$|[\\s)\\]>\"']|[.,;:!?](?:$|\\s))")
+			.matcher(text).find();
 	}
 
 	// 본문에 남길 링크 주소. 웹 주소와 메일 주소만 받는다

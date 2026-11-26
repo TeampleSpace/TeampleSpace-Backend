@@ -44,6 +44,40 @@ class MaterialLinkTests {
 	}
 
 	@Test
+	void rotatedPagesStillFindTheLinkText() throws Exception {
+		for (int rotation : new int[] { 90, 180, 270 }) {
+			try (PDDocument document = new PDDocument()) {
+				PDPage page = new PDPage(PDRectangle.A4);
+				page.setRotation(rotation);
+				document.addPage(page);
+				try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+					content.beginText();
+					content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+					content.newLineAtOffset(72, 700);
+					content.showText("Report guide");
+					content.endText();
+					content.beginText();
+					content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+					content.newLineAtOffset(300, 200);
+					content.showText("Other text");
+					content.endText();
+				}
+				page.getAnnotations().add(link(new PDRectangle(70, 695, 80, 16), "https://example.com/guide"));
+				assertThat(MaterialAnalysis.links(page, "")).as("rotation %d", rotation)
+					.isEqualTo("Report guide (https://example.com/guide)");
+			}
+		}
+	}
+
+	@Test
+	void longerAddressInTextDoesNotHideAShorterLink() {
+		assertThat(MaterialAnalysis.shown("see https://example.com/guide-v2", "https://example.com/guide")).isFalse();
+		assertThat(MaterialAnalysis.shown("see https://example.com/guide.pdf", "https://example.com/guide")).isFalse();
+		assertThat(MaterialAnalysis.shown("see https://example.com/guide.", "https://example.com/guide")).isTrue();
+		assertThat(MaterialAnalysis.shown("(https://example.com/guide)", "https://example.com/guide")).isTrue();
+	}
+
+	@Test
 	void onlyWebAndMailAddressesAreKept() {
 		assertThat(MaterialAnalysis.linkTarget(" https://example.com/a ")).isEqualTo("https://example.com/a");
 		assertThat(MaterialAnalysis.linkTarget("mailto:team@example.com")).isEqualTo("mailto:team@example.com");
