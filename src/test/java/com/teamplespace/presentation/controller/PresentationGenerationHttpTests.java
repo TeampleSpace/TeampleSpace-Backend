@@ -210,7 +210,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		// 항목 순서가 어긋나거나 빠진 항목, 상한을 넘는 응답은 받지 않는다
 		List<Integer> tooMany = new ArrayList<>(Collections.nCopies(PresentationGeneration.CONTENT_SLIDES_MAX, 1));
 		tooMany.add(2);
-		for (List<Integer> numbers : List.of(List.of(1, 2, 1), List.of(1, 1), List.of(2, 1), tooMany)) {
+		for (List<Integer> numbers : List.of(List.of(1, 2, 1), List.of(1, 1), List.of(2, 1), List.of(0, 1, 2), tooMany)) {
 			itemNumbers.set(numbers);
 			JsonNode rejected = owner.request("POST", url, request(2, 2, source), 202, UUID.randomUUID().toString());
 			jobs.run(claim(rejected));

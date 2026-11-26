@@ -392,7 +392,7 @@ public class PresentationGeneration implements JobHandler {
 				int item = numbered ? slide.get("item").asInt() : index + 1;
 				// 항목 순서대로 하나도 빠짐없이 와야 한다
 				int last = items.isEmpty() ? 0 : items.getLast();
-				if (item != last && item != last + 1) {
+				if (item != last + 1 && (item != last || items.isEmpty())) {
 					throw OpenAiPresentationClient.invalidResult();
 				}
 				items.add(item);
