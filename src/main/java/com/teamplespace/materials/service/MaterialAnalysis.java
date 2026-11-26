@@ -9,7 +9,13 @@ import java.util.UUID;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.PDFTextStripperByArea;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
@@ -166,6 +172,8 @@ public class MaterialAnalysis implements JobHandler {
 				stripper.setStartPage(page);
 				stripper.setEndPage(page);
 				String text = clean(stripper.getText(document));
+				String linked = links(document.getPage(page - 1), text);
+				text = text.isEmpty() ? linked : linked.isEmpty() ? text : text + "\n\n" + linked;
 				if (text.isEmpty()) {
 					continue;
 				}
@@ -188,6 +196,72 @@ public class MaterialAnalysis implements JobHandler {
 			// 손상됐거나 암호가 걸린 파일은 다시 시도해도 같다
 			throw unreadable();
 		}
+	}
+
+	// 쪽의 링크 주석을 글자와 주소 한 줄씩으로 만든다. 본문에 이미 보이는 주소는 빼고 같은 주소는 한 번만 쓴다
+	static String links(PDPage page, String pageText) throws IOException {
+		// 주소마다 첫 링크 영역만 쓰고 영역을 모두 등록한 뒤 쪽을 한 번만 해석한다
+		Map<String, PDRectangle> targets = new LinkedHashMap<>();
+		for (PDAnnotation annotation : page.getAnnotations()) {
+			if (!(annotation instanceof PDAnnotationLink link) || !(link.getAction() instanceof PDActionURI action)) continue;
+			String url = linkTarget(action.getURI());
+			if (url != null && !targets.containsKey(url) && !shown(pageText, url)) targets.put(url, link.getRectangle());
+		}
+		if (targets.isEmpty()) return "";
+		PDFTextStripperByArea area = new PDFTextStripperByArea();
+		area.setSortByPosition(true);
+		List<String> urls = new ArrayList<>(targets.keySet());
+		for (int index = 0; index < urls.size(); index++) {
+			PDRectangle rect = targets.get(urls.get(index));
+			if (rect != null) area.addRegion("link" + index, region(rect, page.getCropBox(), page.getRotation()));
+		}
+		if (!area.getRegions().isEmpty()) area.extractRegions(page);
+		List<String> lines = new ArrayList<>();
+		for (int index = 0; index < urls.size(); index++) {
+			String url = urls.get(index);
+			String text = area.getRegions().contains("link" + index) ? area.getTextForRegion("link" + index) : null;
+			String label = text == null ? "" : clean(text).replaceAll("\\s+", " ");
+			lines.add(label.isEmpty() || label.equals(url) ? url : label + " (" + url + ")");
+		}
+		return String.join("\n", lines);
+	}
+
+
+	// 주석 영역을 글자 위치와 같은 좌표로 바꾼다. 글자 위치는 쪽 회전을 반영하고 위가 원점이다
+	static java.awt.geom.Rectangle2D region(PDRectangle rect, PDRectangle box, int rotation) {
+		float width = box.getWidth();
+		float height = box.getHeight();
+		float[][] corners = { { rect.getLowerLeftX(), rect.getLowerLeftY() }, { rect.getUpperRightX(), rect.getUpperRightY() } };
+		java.awt.geom.Rectangle2D.Float area = null;
+		for (float[] corner : corners) {
+			float x = corner[0] - box.getLowerLeftX();
+			float y = corner[1] - box.getLowerLeftY();
+			float[] point = switch (((rotation % 360) + 360) % 360) {
+				case 90 -> new float[] { y, x };
+				case 180 -> new float[] { width - x, y };
+				case 270 -> new float[] { height - y, width - x };
+				default -> new float[] { x, height - y };
+			};
+			if (area == null) area = new java.awt.geom.Rectangle2D.Float(point[0], point[1], 0, 0);
+			else area.add(point[0], point[1]);
+		}
+		return area;
+	}
+
+	// 본문에 주소 전체가 그대로 보이는지 확인한다. 더 긴 주소의 앞부분인 경우는 다른 주소로 본다
+	static boolean shown(String text, String url) {
+		return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(url) + "(?=$|[\\s)\\]>\"']|[.,;:!?](?:$|\\s))")
+			.matcher(text).find();
+	}
+
+	// 본문에 남길 링크 주소. 웹 주소와 메일 주소만 받는다
+	public static String linkTarget(String raw) {
+		if (raw == null || raw.isBlank() || raw.strip().length() > 2048) return null;
+		String url = raw.strip();
+		String lower = url.toLowerCase(java.util.Locale.ROOT);
+		boolean web = (lower.startsWith("http://") || lower.startsWith("https://")) && url.length() > lower.indexOf("//") + 2;
+		boolean mail = lower.startsWith("mailto:") && url.length() > 7;
+		return (web || mail) && url.chars().noneMatch(c -> c < ' ' || c == 127 || Character.isWhitespace(c)) ? url : null;
 	}
 
 	private static JobFailure unreadable() {
