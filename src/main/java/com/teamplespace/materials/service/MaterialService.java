@@ -568,7 +568,7 @@ public class MaterialService {
 				SELECT BIN_TO_UUID(m.id) AS id, BIN_TO_UUID(m.project_id) AS project_id, m.kind, m.title, m.description,
 				       m.state, m.version, m.source_url, BIN_TO_UUID(m.created_by) AS created_by,
 				       u.display_name AS creator_name, m.created_at, m.updated_at,
-				       BIN_TO_UUID(r.id) AS revision_id, r.revision_no, r.page_count, r.summary, r.excerpt, r.excerpt_page,
+				       BIN_TO_UUID(r.id) AS revision_id, r.revision_no, r.page_count, r.summary, r.analysis, r.excerpt, r.excerpt_page,
 				       BIN_TO_UUID(r.created_by) AS revision_by, ru.display_name AS revision_by_name,
 				       r.created_at AS revision_at, f.mime_type, f.size_bytes, up.original_name
 				FROM materials m
@@ -594,6 +594,8 @@ public class MaterialService {
 				revision.put("sourceVersion", rs.getLong("revision_no"));
 				revision.put("pageCount", rs.getObject("page_count"));
 				revision.put("summary", rs.getString("summary"));
+				String analysis = rs.getString("analysis");
+				revision.put("analysis", analysis == null ? null : json.readTree(analysis));
 				Map<String, Object> excerpt = null;
 				if (rs.getString("excerpt") != null) {
 					excerpt = new LinkedHashMap<>();

@@ -10,6 +10,12 @@
 - 보는 탭 경로 `PUT /v1/projects/{projectId}/viewing`과 `ViewingRequest`, `ProjectTab`, `ViewersUpdated` 형식을 추가. 창마다 다른 `viewId`를 실으면 떠남은 마지막으로 알린 창의 것만 반영한다
 - 이벤트 구독은 나를 뺀 팀원의 탭 목록이 바뀔 때 `viewers.updated`를 SSE `id` 없이 보낸다. 이벤트 순번과 재연결 커서에는 영향이 없다
 
+## 2026-11-26 자료 AI 요약을 분석 정리로 확장
+
+- 자료 상세의 `currentRevision`에 `analysis`를 추가했다. 개요 `overview`, 주요 논점과 근거 `keyPoints`, 발표 포인트 `presentationPoints`를 담고 분석 전에는 null이다
+- `summary`에는 분석의 개요를 함께 넣는다. 이전에 만든 요약만 있고 `analysis`가 null인 개정은 분석을 다시 요청할 수 있다
+- 요약 작업의 고정 입력 `promptVersion`을 `material-analysis-v1`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
+
 ## 2026-11-26 발표 생성 결과 검증 실패의 재시도
 
 - `JOB_PRESENTATION_INVALID_RESULT`의 `retryable`을 true로 바꿨다. 결과가 맞지 않으면 남은 시도 횟수 안에서 다시 생성하고, 시도를 다 쓴 뒤에도 사용자가 다시 요청할 수 있다
