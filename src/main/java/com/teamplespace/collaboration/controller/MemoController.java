@@ -30,6 +30,9 @@ public class MemoController {
 	record CompactRequest(Long upTo, String data) {
 	}
 
+	record AwarenessRequest(String data) {
+	}
+
 	private final MemoUpdates updates;
 
 	private final Signals signals;
@@ -63,6 +66,15 @@ public class MemoController {
 	ResponseEntity<Void> compact(@PathVariable UUID materialId, @RequestBody CompactRequest input,
 			HttpServletRequest request) {
 		updates.compact(actor(request), materialId, input.upTo() == null ? 0 : input.upTo(), input.data());
+		return ResponseEntity.noContent().build();
+	}
+
+	// 커서와 선택 영역. 같은 프로젝트의 구독으로 바로 넘기고 저장하지 않는다
+	@PostMapping("/memo-awareness")
+	ResponseEntity<Void> awareness(@PathVariable UUID materialId, @RequestBody AwarenessRequest input,
+			HttpServletRequest request) {
+		UUID projectId = updates.awareness(actor(request), materialId, input.data());
+		signals.publish(projectId, "memo.awareness", Map.of("materialId", materialId.toString(), "data", input.data()));
 		return ResponseEntity.noContent().build();
 	}
 
