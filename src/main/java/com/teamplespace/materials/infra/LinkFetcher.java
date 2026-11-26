@@ -228,6 +228,14 @@ public class LinkFetcher {
 			title = document.title().strip();
 			title = title.isEmpty() ? null : title.substring(0, Math.min(title.length(), 255));
 			document.select("script,style,noscript,template,svg,iframe,nav,header,footer,aside,form").remove();
+			// 링크 글자 뒤에 실제 주소를 남긴다. 글자가 없거나 주소와 같으면 주소만 쓴다
+			for (var anchor : document.select("a[href]")) {
+				String url = MaterialAnalysis.linkTarget(anchor.absUrl("href"));
+				if (url == null) continue;
+				String label = anchor.text().strip();
+				if (label.isEmpty()) anchor.text(url);
+				else if (!label.equals(url)) anchor.appendText(" (" + url + ")");
+			}
 			// 문단 경계에 표시를 넣어 한 줄로 합쳐지는 것을 막는다
 			document.select("br").append("\\n");
 			document.select("p,div,li,h1,h2,h3,h4,h5,h6,tr,blockquote,section,article,pre").prepend("\\n\\n");

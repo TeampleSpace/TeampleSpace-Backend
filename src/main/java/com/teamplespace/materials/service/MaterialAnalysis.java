@@ -9,7 +9,13 @@ import java.util.UUID;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.PDFTextStripperByArea;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
@@ -166,6 +172,8 @@ public class MaterialAnalysis implements JobHandler {
 				stripper.setStartPage(page);
 				stripper.setEndPage(page);
 				String text = clean(stripper.getText(document));
+				String linked = links(document.getPage(page - 1), text);
+				text = text.isEmpty() ? linked : linked.isEmpty() ? text : text + "\n\n" + linked;
 				if (text.isEmpty()) {
 					continue;
 				}
@@ -188,6 +196,41 @@ public class MaterialAnalysis implements JobHandler {
 			// 손상됐거나 암호가 걸린 파일은 다시 시도해도 같다
 			throw unreadable();
 		}
+	}
+
+	// 쪽의 링크 주석을 글자와 주소 한 줄씩으로 만든다. 본문에 이미 보이는 주소는 빼고 같은 주소는 한 번만 쓴다
+	static String links(PDPage page, String pageText) throws IOException {
+		List<String> lines = new ArrayList<>();
+		List<String> seen = new ArrayList<>();
+		PDRectangle box = page.getCropBox();
+		for (PDAnnotation annotation : page.getAnnotations()) {
+			if (!(annotation instanceof PDAnnotationLink link) || !(link.getAction() instanceof PDActionURI action)) continue;
+			String url = linkTarget(action.getURI());
+			if (url == null || seen.contains(url) || pageText.contains(url)) continue;
+			seen.add(url);
+			String label = "";
+			PDRectangle rect = link.getRectangle();
+			if (rect != null) {
+				// 주석 좌표는 아래가 원점이고 영역 추출은 위가 원점이다
+				PDFTextStripperByArea area = new PDFTextStripperByArea();
+				area.addRegion("link", new java.awt.geom.Rectangle2D.Float(rect.getLowerLeftX() - box.getLowerLeftX(),
+						box.getUpperRightY() - rect.getUpperRightY(), rect.getWidth(), rect.getHeight()));
+				area.extractRegions(page);
+				label = clean(area.getTextForRegion("link")).replaceAll("\\s+", " ");
+			}
+			lines.add(label.isEmpty() || label.equals(url) ? url : label + " (" + url + ")");
+		}
+		return String.join("\n", lines);
+	}
+
+	// 본문에 남길 링크 주소. 웹 주소와 메일 주소만 받는다
+	public static String linkTarget(String raw) {
+		if (raw == null || raw.isBlank() || raw.strip().length() > 2048) return null;
+		String url = raw.strip();
+		String lower = url.toLowerCase(java.util.Locale.ROOT);
+		boolean web = (lower.startsWith("http://") || lower.startsWith("https://")) && url.length() > lower.indexOf("//") + 2;
+		boolean mail = lower.startsWith("mailto:") && url.length() > 7;
+		return (web || mail) && url.chars().noneMatch(c -> c < ' ' || c == 127 || Character.isWhitespace(c)) ? url : null;
 	}
 
 	private static JobFailure unreadable() {
