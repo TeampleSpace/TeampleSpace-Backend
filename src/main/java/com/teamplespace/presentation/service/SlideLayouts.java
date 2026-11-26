@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -19,7 +20,24 @@ final class SlideLayouts {
 	}
 
 	// style은 템플릿 없이 만들 때 제공자가 고른 디자인 계열이다
-	record Deck(String title, String subtitle, String style, List<Section> slides, Section closing) {
+	// items는 본문 슬라이드마다 속한 구성 항목 번호다. 1부터 시작하고 한 항목이 여러 슬라이드를 가질 수 있다
+	record Deck(String title, String subtitle, String style, List<Section> slides, Section closing, List<Integer> items) {
+
+		Deck(String title, String subtitle, String style, List<Section> slides, Section closing) {
+			this(title, subtitle, style, slides, closing,
+					IntStream.rangeClosed(1, slides.size()).boxed().toList());
+		}
+
+		// 구성 항목마다 첫 슬라이드. 목차와 표지는 항목 기준으로 쓴다
+		List<Section> topics() {
+			List<Section> topics = new ArrayList<>();
+			for (int index = 0; index < slides.size(); index++) {
+				if (index == 0 || !items.get(index).equals(items.get(index - 1))) {
+					topics.add(slides.get(index));
+				}
+			}
+			return topics;
+		}
 	}
 
 	record Element(String type, int x, int y, int width, int height, ObjectNode content, ObjectNode style) {
@@ -161,7 +179,7 @@ final class SlideLayouts {
 		}
 	}
 
-	// sources는 본문 슬라이드마다 출처 문구이고 없으면 null이다
+	// sources는 구성 항목마다 출처 문구이고 없으면 null이다
 	static List<Slide> build(ObjectMapper json, Deck deck, Theme theme, List<String> sources) {
 		Design design = switch (theme.style()) {
 			case "editorial" -> new Editorial();
@@ -180,9 +198,9 @@ final class SlideLayouts {
 		design.begin();
 		design.cover(deck.title(), deck.subtitle());
 		slides.add(design.finish("title"));
-		if (deck.slides().size() >= 3) {
+		if (deck.topics().size() >= 3) {
 			design.begin();
-			List<String> titles = deck.slides().stream().map(Section::title).toList();
+			List<String> titles = deck.topics().stream().map(Section::title).toList();
 			if (titles.size() <= design.agendaLimit()) {
 				design.agenda(titles);
 			}
@@ -193,7 +211,8 @@ final class SlideLayouts {
 		}
 		String previous = null;
 		for (int index = 0; index < deck.slides().size(); index++) {
-			Slide slide = design.content(deck.slides().get(index), index + 1, sources.get(index), slides.size() + 1,
+			int item = deck.items().get(index);
+			Slide slide = design.content(deck.slides().get(index), item, sources.get(item - 1), slides.size() + 1,
 					previous);
 			previous = slide.layout();
 			slides.add(slide);
@@ -1757,7 +1776,7 @@ final class SlideLayouts {
 		void cover(String title, String subtitle) {
 			rect(0, 0, WIDTH, HEIGHT, t.bg());
 			rect(col(0), 48, 120, 120, t.accent());
-			List<Section> sections = deck.slides();
+			List<Section> sections = deck.topics();
 			for (int i = 0; i < Math.min(2, sections.size()); i++) {
 				tx(col(4 + i * 4), 48, 380, two(i + 1) + "\n" + sections.get(i).title(), 16, 12, 3, 700, t.ink(), "left",
 						1.5);
@@ -1999,7 +2018,7 @@ final class SlideLayouts {
 			int y = 220 + dx(96, 220, 680, title, 64, 36, 3, t.onAccent(), "left", 1.2);
 			tx(96, y + 28, 620, subtitle, 20, 15, 3, 500, t.onAccentSoft(), "left", 1.6);
 			int[][] tiles = { { 832, 48, 400, 300 }, { 832, 372, 188, 300 }, { 1044, 372, 188, 300 } };
-			List<Section> sections = deck.slides();
+			List<Section> sections = deck.topics();
 			for (int i = 0; i < 3; i++) {
 				int[] r = tiles[i];
 				rect(r[0], r[1], r[2], r[3], PASTELS[i], 32);
@@ -2281,7 +2300,7 @@ final class SlideLayouts {
 				put(64, y + 24, 900, subtitle, sub, 400, t.onAccentSoft(), "left", 1.6, false);
 			}
 			tx(64, 596, 400, "구성", 14, 14, 1, 700, t.muted(), "left", 1.4);
-			tx(64, 620, 600, "본문 " + deck.slides().size() + "개 주제와 정리", 18, 18, 1, 700, t.ink(), "left", 1.4);
+			tx(64, 620, 600, "본문 " + deck.topics().size() + "개 주제와 정리", 18, 18, 1, 700, t.ink(), "left", 1.4);
 			rect(1040, 600, 176, 64, t.accent());
 			tx(1040, 620, 176, "REPORT", 18, 18, 1, 800, goldOn(t.accent()), "center", 1.3);
 		}

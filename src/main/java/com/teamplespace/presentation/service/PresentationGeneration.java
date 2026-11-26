@@ -60,13 +60,17 @@ public class PresentationGeneration implements JobHandler {
 
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
-	private static final String PROMPT_VERSION = "presentation-v3";
+	private static final String PROMPT_VERSION = "presentation-v4";
 	private static final Set<String> REQUEST_FIELDS = Set.of("outlineVersion", "designVersion", "sourceIds");
+	private static final Set<String> CLOSING_FIELDS = Set.of("layout", "title", "message", "figure", "points");
+	private static final Set<String> SLIDE_FIELDS = Set.of("item", "layout", "title", "message", "figure", "points");
 	private static final Pattern COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
 	private static final String FONT = "Pretendard";
 	private static final String DISPLAY_FONT = "Gmarket Sans TTF";
 	private static final int SOURCE_TITLE_MAX = 18;
 	private static final int SOURCE_TITLES_SHOWN = 3;
+	// 본문 슬라이드 수 상한. 구성 항목이 더 많으면 항목 수까지 받는다
+	public static final int CONTENT_SLIDES_MAX = 30;
 
 	private final JdbcClient jdbc;
 	private final ObjectMapper json;
@@ -184,6 +188,8 @@ public class PresentationGeneration implements JobHandler {
 		var prompt = json.createObjectNode();
 		JsonNode custom = input.snapshot().designSettings().custom();
 		prompt.put("guidelines", custom == null ? "" : custom.path("guidelines").asString(""));
+		int itemCount = outline.items().size();
+		prompt.put("maxSlides", Math.max(itemCount, CONTENT_SLIDES_MAX));
 		var items = prompt.putArray("items");
 		List<String> sourceLines = new ArrayList<>();
 		for (OutlineService.Item item : outline.items()) {
@@ -203,7 +209,7 @@ public class PresentationGeneration implements JobHandler {
 			sources.addObject().put("number", index + 1).put("title", source.title()).put("text", source.text());
 		}
 
-		Deck deck = parseResult(provider.generate(input.model(), json.writeValueAsString(prompt)), outline.items().size());
+		Deck deck = parseResult(provider.generate(input.model(), json.writeValueAsString(prompt)), itemCount);
 		try {
 			List<Slide> slides = SlideLayouts.build(json, deck, theme(input.snapshot().designSettings(), deck.style()), sourceLines);
 			slides.forEach(slide -> slide.elements()
@@ -371,27 +377,44 @@ public class PresentationGeneration implements JobHandler {
 		try {
 			OutlineInput.checkFields(generated, Set.of("title", "subtitle", "style", "slides", "closing"), "presentation");
 			JsonNode slides = generated.path("slides");
-			if (!slides.isArray() || slides.size() != itemCount) {
+			if (!slides.isArray() || slides.isEmpty() || slides.size() > Math.max(itemCount, CONTENT_SLIDES_MAX)) {
 				throw OpenAiPresentationClient.invalidResult();
 			}
+			// 항목 번호가 없는 응답은 항목마다 한 장씩 온 것으로 본다
+			boolean numbered = slides.get(0).has("item");
 			List<Section> sections = new ArrayList<>();
-			for (JsonNode slide : slides) {
-				sections.add(section(slide));
+			List<Integer> items = new ArrayList<>();
+			for (int index = 0; index < slides.size(); index++) {
+				JsonNode slide = slides.get(index);
+				if (slide.has("item") != numbered || numbered && !slide.get("item").isInt()) {
+					throw OpenAiPresentationClient.invalidResult();
+				}
+				int item = numbered ? slide.get("item").asInt() : index + 1;
+				// 항목 순서대로 하나도 빠짐없이 와야 한다
+				int last = items.isEmpty() ? 0 : items.getLast();
+				if (item != last + 1 && (item != last || items.isEmpty())) {
+					throw OpenAiPresentationClient.invalidResult();
+				}
+				items.add(item);
+				sections.add(section(slide, true));
+			}
+			if (items.getLast() != itemCount) {
+				throw OpenAiPresentationClient.invalidResult();
 			}
 			// 모르는 계열은 기본 계열로 그린다
 			String style = generated.path("style").asString("");
 			return new Deck(line(generated.path("title"), SlideLayouts.DECK_TITLE_MAX),
 					line(generated.path("subtitle"), SlideLayouts.SUBTITLE_MAX),
 					SlideLayouts.STYLES.contains(style) ? style : "focus", List.copyOf(sections),
-					section(generated.path("closing")));
+					section(generated.path("closing"), false), List.copyOf(items));
 		}
 		catch (ApiException ex) {
 			throw OpenAiPresentationClient.invalidResult();
 		}
 	}
 
-	private static Section section(JsonNode node) {
-		OutlineInput.checkFields(node, Set.of("layout", "title", "message", "figure", "points"), "slides");
+	private static Section section(JsonNode node, boolean body) {
+		OutlineInput.checkFields(node, body ? SLIDE_FIELDS : CLOSING_FIELDS, "slides");
 		JsonNode points = node.path("points");
 		if (!points.isArray() || points.isEmpty() || points.size() > SlideLayouts.POINTS_MAX) {
 			throw OpenAiPresentationClient.invalidResult();
