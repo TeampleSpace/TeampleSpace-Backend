@@ -5,10 +5,13 @@ import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -49,6 +52,7 @@ public class OpenAiResearchClient {
 	static final int SOURCES_MAX = 10;
 	static final int TITLE_MAX = 200;
 	static final int URL_MAX = 2000;
+	private static final Pattern CITATION = Pattern.compile("( ?)\\[(\\d{1,2})\\]");
 
 	private final ObjectMapper json;
 	private final OpenAiResponsesClient responses;
@@ -110,25 +114,46 @@ public class OpenAiResearchClient {
 			throw invalidResult();
 		}
 		List<Source> sources = new ArrayList<>();
-		Set<String> seen = new HashSet<>();
+		// 모델 출처 번호와 남긴 출처 번호의 짝. 본문의 인용 번호를 다시 매긴다
+		Map<Integer, Integer> numbers = new HashMap<>();
+		Map<String, Integer> kept = new HashMap<>();
+		int number = 0;
 		for (JsonNode item : output.path("sources")) {
+			number++;
 			String url = item.path("url").asString("").strip();
 			String title = item.path("title").asString("").strip();
 			String key = comparable(url);
-			if (key == null || !searched.contains(key) || !seen.add(key) || sources.size() == SOURCES_MAX) {
+			if (key == null || !searched.contains(key)) {
 				continue;
 			}
+			if (kept.containsKey(key)) {
+				numbers.put(number, kept.get(key));
+				continue;
+			}
+			if (sources.size() == SOURCES_MAX) {
+				continue;
+			}
+			kept.put(key, sources.size() + 1);
+			numbers.put(number, sources.size() + 1);
 			if (title.isEmpty()) {
 				title = URI.create(url).getHost();
 			}
 			sources.add(new Source(title.codePointCount(0, title.length()) > TITLE_MAX
 					? title.substring(0, title.offsetByCodePoints(0, TITLE_MAX)) : title, url));
 		}
-		// ponytail: 출처를 하나도 확인하지 못하면 결과를 버린다. 번호와 출처 순서는 모델 응답을 믿는다
+		// 출처를 하나도 확인하지 못하면 결과를 버린다
 		if (sources.isEmpty()) {
 			throw invalidResult();
 		}
-		return new Result(markdown, List.copyOf(sources));
+		return new Result(renumber(markdown, numbers), List.copyOf(sources));
+	}
+
+	// 남긴 출처는 새 번호로 바꾸고 버린 출처의 인용 표시는 지운다
+	static String renumber(String markdown, Map<Integer, Integer> numbers) {
+		return CITATION.matcher(markdown).replaceAll(match -> {
+			Integer next = numbers.get(Integer.parseInt(match.group(2)));
+			return next == null ? "" : match.group(1) + "[" + next + "]";
+		});
 	}
 
 	// 검색 도구가 실제로 연 주소와 본문 인용 주소
@@ -156,7 +181,7 @@ public class OpenAiResearchClient {
 		}
 	}
 
-	// 추적 매개변수와 끝 빗금 차이는 같은 주소로 본다
+	// 추적 매개변수, 끝 빗금, 기본 포트 표기 차이는 같은 주소로 본다
 	static String comparable(String url) {
 		if (url.isEmpty() || url.length() > URL_MAX) {
 			return null;
@@ -170,7 +195,10 @@ public class OpenAiResearchClient {
 			String path = uri.getRawPath() == null ? "" : uri.getRawPath().replaceAll("/+$", "");
 			String query = uri.getRawQuery() == null ? "" : String.join("&", Arrays.stream(uri.getRawQuery().split("&"))
 				.filter(pair -> !pair.startsWith("utm_")).toList());
-			return uri.getHost().toLowerCase(Locale.ROOT) + path + (query.isEmpty() ? "" : "?" + query);
+			int port = uri.getPort();
+			boolean defaultPort = port == -1 || port == ("https".equals(scheme) ? 443 : 80);
+			return uri.getHost().toLowerCase(Locale.ROOT) + (defaultPort ? "" : ":" + port) + path
+					+ (query.isEmpty() ? "" : "?" + query);
 		}
 		catch (URISyntaxException ex) {
 			return null;
