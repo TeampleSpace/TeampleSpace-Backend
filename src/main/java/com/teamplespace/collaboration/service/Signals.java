@@ -35,13 +35,13 @@ public class Signals {
 
 	public void publish(UUID projectId, String type, Object data) {
 		Instant now = clock.instant();
-		// 번호를 붙이는 것과 넣는 것을 함께 해 순서대로 쌓는다
+		Instant expired = now.minus(KEEP);
+		// 번호 붙이기, 넣기, 만료 정리를 한 잠금 안에서 해 순서대로 쌓고 유효한 신호를 지우지 않는다
 		synchronized (recent) {
 			recent.addLast(new Signal(last.incrementAndGet(), projectId, type, data, now));
-		}
-		Instant expired = now.minus(KEEP);
-		for (Signal first = recent.peekFirst(); first != null && first.at().isBefore(expired); first = recent.peekFirst()) {
-			recent.pollFirst();
+			while (!recent.isEmpty() && recent.peekFirst().at().isBefore(expired)) {
+				recent.pollFirst();
+			}
 		}
 	}
 
