@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.teamplespace.identity.service.AuthService;
 import com.teamplespace.materials.service.MaterialComments;
 import com.teamplespace.materials.service.MaterialComments.CommentRequest;
+import com.teamplespace.materials.service.MaterialResearch;
 import com.teamplespace.materials.service.MaterialService.DeleteRequest;
 import com.teamplespace.materials.service.MaterialService.LinkRequest;
 import com.teamplespace.materials.service.MaterialService.MemoRequest;
@@ -45,10 +46,12 @@ public class MaterialController {
 	private final MaterialSummary summaries;
 
 	private final MaterialComments comments;
+	private final MaterialResearch research;
 	private final AuthService auth;
 
 	public MaterialController(MaterialService materials, UploadService uploads, MaterialSummary summaries,
-			MaterialComments comments, AuthService auth) {
+			MaterialComments comments, MaterialResearch research, AuthService auth) {
+		this.research = research;
 		this.materials = materials;
 		this.uploads = uploads;
 		this.summaries = summaries;
@@ -84,6 +87,12 @@ public class MaterialController {
 	ResponseEntity<JsonNode> summarize(@PathVariable UUID materialId, @RequestBody JsonNode input,
 			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
 		return ResponseEntity.accepted().body(summaries.create(actor(request), materialId, key, input));
+	}
+
+	@PostMapping("/projects/{projectId}/research-jobs")
+	ResponseEntity<JsonNode> research(@PathVariable UUID projectId, @RequestBody JsonNode input,
+			@RequestHeader(name = "Idempotency-Key", required = false) String key, HttpServletRequest request) {
+		return ResponseEntity.accepted().body(research.create(actor(request), projectId, key, input));
 	}
 
 	@GetMapping("/projects/{projectId}/materials")
