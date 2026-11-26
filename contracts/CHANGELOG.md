@@ -5,6 +5,13 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-26 AI 자료 조사 추가
+
+- 조사 작업 등록 `POST /v1/projects/{projectId}/research-jobs`와 `MaterialResearchJobRequest`, `MaterialResearchResult` 형식을 추가
+- 작업 종류는 `material_research`, 대상은 `project`다. 결과는 작업의 `resultRef`에 담기고 자료로 저장하지 않는다
+- `featureFlags.materialResearch`를 추가
+- 작업 실패 코드 `JOB_RESEARCH_PROVIDER_UNAVAILABLE`, `JOB_RESEARCH_INVALID_RESULT`, `JOB_RESEARCH_ACCESS_REVOKED`를 추가
+
 ## 2026-11-26 발표 생성 문구 규칙 보완
 
 - 발표 생성 고정 입력의 `promptVersion`을 `presentation-v5`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
