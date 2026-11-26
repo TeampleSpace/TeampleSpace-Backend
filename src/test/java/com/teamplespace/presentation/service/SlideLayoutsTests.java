@@ -109,6 +109,18 @@ class SlideLayoutsTests {
 			.map(element -> element.content().get("text").asString()).toList();
 	}
 
+	// 스튜디오 템플릿은 공통 계열이 아니라 피그마 전용 배치로 만든다
+	@Test
+	void studioTemplatesUseTheirOwnDesigns() {
+		assertThat(SlideLayouts.TEMPLATES.get("burgundy-editorial").style()).isEqualTo("burgundy");
+		assertThat(SlideLayouts.TEMPLATES.get("tech-pitch").style()).isEqualTo("signal");
+		assertThat(SlideLayouts.TEMPLATES.get("open-campus").style()).isEqualTo("campus");
+		assertThat(SlideLayouts.TEMPLATES.get("field-notes").style()).isEqualTo("fieldnotes");
+		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("burgundy-editorial"));
+		Slide agenda = SlideLayouts.build(json, sample(), theme, sources(sample())).get(1);
+		assertThat(texts(agenda)).contains("Contents");
+	}
+
 	@Test
 	void customStyleFollowsPrimaryColor() {
 		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.custom("corporate", "#7A1F2B"));
