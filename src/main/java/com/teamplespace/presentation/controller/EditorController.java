@@ -146,7 +146,7 @@ public class EditorController {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
 		}
 		JsonNode seq = body.path("seq");
-		if (!seq.isMissingNode() && !seq.canConvertToLong()) {
+		if (!seq.isMissingNode() && !(seq.isIntegralNumber() && seq.canConvertToLong())) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "seq", "INVALID", "알림 순번을 확인해 주세요.");
 		}
 		viewers.view(actor, projectId, tab.isNull() ? null : tab.asString(),

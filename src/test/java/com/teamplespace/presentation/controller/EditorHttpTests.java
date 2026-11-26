@@ -315,6 +315,16 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
 		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
 		owner.request("PUT", path, json.createObjectNode().put("tab", "outline").put("seq", "x"), 422);
+
+		// 소수 순번은 잘라 받지 않고 거절해 보던 탭을 바꾸지 않는다
+		owner.request("PUT", path, tab.deepCopy().put("seq", 5), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers").get(0).get("tab").asString())
+			.isEqualTo("materials");
+		owner.request("PUT", path, tab.deepCopy().put("tab", "design").put("seq", 5.5), 422);
+		owner.request("PUT", path, tab.deepCopy().putNull("tab").put("seq", -0.5), 422);
+		owner.request("PUT", path, tab.deepCopy().put("tab", "outline").put("seq", 6), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers").get(0).get("tab").asString())
+			.isEqualTo("outline");
 	}
 
 	@Test
