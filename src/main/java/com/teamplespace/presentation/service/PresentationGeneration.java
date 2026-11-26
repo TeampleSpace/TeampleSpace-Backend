@@ -63,11 +63,12 @@ public class PresentationGeneration implements JobHandler {
 	private static final Logger log = LoggerFactory.getLogger(PresentationGeneration.class);
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
-	private static final String PROMPT_VERSION = "presentation-v4";
+	private static final String PROMPT_VERSION = "presentation-v5";
 	private static final Set<String> REQUEST_FIELDS = Set.of("outlineVersion", "designVersion", "sourceIds");
 	private static final Set<String> CLOSING_FIELDS = Set.of("layout", "title", "message", "figure", "points");
 	private static final Set<String> SLIDE_FIELDS = Set.of("item", "layout", "title", "message", "figure", "points");
 	private static final Pattern COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
+	private static final Pattern LEADING_MARK = Pattern.compile("^[-*]\\s+");
 	private static final String FONT = "Pretendard";
 	private static final String DISPLAY_FONT = "Gmarket Sans TTF";
 	private static final int SOURCE_TITLE_MAX = 18;
@@ -439,7 +440,7 @@ public class PresentationGeneration implements JobHandler {
 
 	// 비어 있어도 되는 글. 공백을 한 칸으로 줄이고 길이를 넘으면 비워서 생성을 계속한다
 	private static String optional(JsonNode node, String field, int max) {
-		String value = node.asString("").strip().replaceAll("\\s+", " ");
+		String value = clean(node.asString(""));
 		int length = value.codePointCount(0, value.length());
 		if (length > max) {
 			log.info("발표 생성 결과의 {} 길이 {}자가 {}자를 넘어 비웠어요", field, length, max);
@@ -450,12 +451,26 @@ public class PresentationGeneration implements JobHandler {
 
 	// 줄바꿈과 겹친 공백은 한 칸으로 줄이고 글상자에 넘치는 길이는 받지 않는다
 	private static String line(JsonNode node, String field, int max) {
-		String value = OutlineInput.text(node, "presentation", Integer.MAX_VALUE).strip().replaceAll("\\s+", " ");
+		String value = clean(OutlineInput.text(node, "presentation", Integer.MAX_VALUE));
 		int length = value.codePointCount(0, value.length());
 		if (value.isEmpty() || length > max) {
 			throw rejected(field, length + " of " + max);
 		}
 		return value;
+	}
+
+	// 이모지와 장식 기호, 앞에 붙은 글머리표를 지우고 공백을 한 칸으로 줄인다. 도와 단위 기호는 남긴다
+	static String clean(String text) {
+		StringBuilder kept = new StringBuilder();
+		text.codePoints().filter(cp -> !decoration(cp)).forEach(kept::appendCodePoint);
+		return LEADING_MARK.matcher(kept.toString().replaceAll("\\s+", " ").strip()).replaceFirst("");
+	}
+
+	private static boolean decoration(int cp) {
+		boolean unit = cp == 0xB0 || cp == 0x2103 || cp >= 0x3380 && cp <= 0x33FF;
+		return Character.getType(cp) == Character.OTHER_SYMBOL && !unit || cp >= 0x2190 && cp <= 0x21FF
+				|| cp >= 0x1F3FB && cp <= 0x1F3FF || cp == 0x200D || cp == 0x20E3 || cp == 0xFE0F || cp == 0xFE0E
+				|| cp == 0x2022;
 	}
 
 	// 어느 검사에서 거절했는지만 남기고 생성된 글은 남기지 않는다
