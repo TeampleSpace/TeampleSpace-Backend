@@ -70,6 +70,30 @@ class MaterialLinkTests {
 	}
 
 	@Test
+	void manyLinksOnOnePageKeepTheirOwnText() throws Exception {
+		try (PDDocument document = new PDDocument()) {
+			PDPage page = new PDPage(PDRectangle.A4);
+			document.addPage(page);
+			StringBuilder expected = new StringBuilder();
+			try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+				for (int index = 0; index < 300; index++) {
+					float x = 40 + (index % 6) * 90;
+					float y = 800 - (index / 6) * 15;
+					content.beginText();
+					content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 8);
+					content.newLineAtOffset(x, y);
+					content.showText("Ref " + index);
+					content.endText();
+					page.getAnnotations().add(link(new PDRectangle(x - 1, y - 2, 40, 11), "https://example.com/ref/" + index));
+					expected.append(index == 0 ? "" : "\n").append("Ref ").append(index).append(" (https://example.com/ref/").append(index).append(")");
+				}
+			}
+			org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(5),
+					() -> assertThat(MaterialAnalysis.links(page, "")).isEqualTo(expected.toString()));
+		}
+	}
+
+	@Test
 	void longerAddressInTextDoesNotHideAShorterLink() {
 		assertThat(MaterialAnalysis.shown("see https://example.com/guide-v2", "https://example.com/guide")).isFalse();
 		assertThat(MaterialAnalysis.shown("see https://example.com/guide.pdf", "https://example.com/guide")).isFalse();

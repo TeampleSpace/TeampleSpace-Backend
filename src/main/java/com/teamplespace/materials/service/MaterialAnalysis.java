@@ -200,28 +200,32 @@ public class MaterialAnalysis implements JobHandler {
 
 	// 쪽의 링크 주석을 글자와 주소 한 줄씩으로 만든다. 본문에 이미 보이는 주소는 빼고 같은 주소는 한 번만 쓴다
 	static String links(PDPage page, String pageText) throws IOException {
-		List<String> lines = new ArrayList<>();
-		List<String> seen = new ArrayList<>();
-		PDRectangle box = page.getCropBox();
+		// 주소마다 첫 링크 영역만 쓰고 영역을 모두 등록한 뒤 쪽을 한 번만 해석한다
+		Map<String, PDRectangle> targets = new LinkedHashMap<>();
 		for (PDAnnotation annotation : page.getAnnotations()) {
 			if (!(annotation instanceof PDAnnotationLink link) || !(link.getAction() instanceof PDActionURI action)) continue;
 			String url = linkTarget(action.getURI());
-			if (url == null || seen.contains(url) || shown(pageText, url)) continue;
-			seen.add(url);
-			String label = "";
-			PDRectangle rect = link.getRectangle();
-			if (rect != null) {
-				// 주석 좌표는 아래가 원점이고 영역 추출은 위가 원점이다
-				PDFTextStripperByArea area = new PDFTextStripperByArea();
-				area.setSortByPosition(true);
-				area.addRegion("link", region(rect, box, page.getRotation()));
-				area.extractRegions(page);
-				label = clean(area.getTextForRegion("link")).replaceAll("\\s+", " ");
-			}
+			if (url != null && !targets.containsKey(url) && !shown(pageText, url)) targets.put(url, link.getRectangle());
+		}
+		if (targets.isEmpty()) return "";
+		PDFTextStripperByArea area = new PDFTextStripperByArea();
+		area.setSortByPosition(true);
+		List<String> urls = new ArrayList<>(targets.keySet());
+		for (int index = 0; index < urls.size(); index++) {
+			PDRectangle rect = targets.get(urls.get(index));
+			if (rect != null) area.addRegion("link" + index, region(rect, page.getCropBox(), page.getRotation()));
+		}
+		if (!area.getRegions().isEmpty()) area.extractRegions(page);
+		List<String> lines = new ArrayList<>();
+		for (int index = 0; index < urls.size(); index++) {
+			String url = urls.get(index);
+			String text = area.getRegions().contains("link" + index) ? area.getTextForRegion("link" + index) : null;
+			String label = text == null ? "" : clean(text).replaceAll("\\s+", " ");
 			lines.add(label.isEmpty() || label.equals(url) ? url : label + " (" + url + ")");
 		}
 		return String.join("\n", lines);
 	}
+
 
 	// 주석 영역을 글자 위치와 같은 좌표로 바꾼다. 글자 위치는 쪽 회전을 반영하고 위가 원점이다
 	static java.awt.geom.Rectangle2D region(PDRectangle rect, PDRectangle box, int rotation) {
