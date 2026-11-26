@@ -86,6 +86,14 @@ class ViewersTests {
 	}
 
 	@Test
+	void lateNoticeWithoutViewIdDoesNotReturnAfterLeaving() {
+		viewers.view(owner, project, "materials", null, 1L);
+		viewers.view(owner, project, null, null, 3L);
+		viewers.view(owner, project, "outline", null, 2L);
+		assertThat(viewers.others(project, member.userId())).isEmpty();
+	}
+
+	@Test
 	void expiryCleanupDoesNotDropConcurrentUpdates() throws Exception {
 		// 만료 정리와 새 알림이 겹쳐도 마지막 알림은 남는다
 		for (int round = 0; round < 200; round++) {

@@ -74,8 +74,11 @@ public class Viewers {
 				return current;
 			}
 			if (tab == null && viewId == null) {
-				// 창을 구분하지 않은 떠남은 이 사람의 표시를 모두 지운다
+				// 창을 구분하지 않은 떠남은 이 사람의 표시를 모두 지운다. 순번이 있으면 늦은 이전 알림을 막도록 남긴다
 				views.clear();
+				if (seq != null) {
+					views.put(key, new View(null, seq, order.incrementAndGet(), clock.instant()));
+				}
 			}
 			else {
 				views.put(key, new View(tab, seq, order.incrementAndGet(), clock.instant()));
