@@ -315,6 +315,7 @@ class SlideLayoutsTests {
 			.isEqualTo("매출 12% 증가");
 		assertThat(PresentationGeneration.clean("- 영하 3\u2103, 84\u33A1")).isEqualTo("영하 3\u2103, 84\u33A1");
 		assertThat(PresentationGeneration.clean("\uD83D\uDC4D\uD83C\uDFFB")).isEmpty();
+		assertThat(PresentationGeneration.clean("화씨 77\u2109")).isEqualTo("화씨 77\u2109");
 	}
 
 }
