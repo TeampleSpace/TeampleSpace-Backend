@@ -309,4 +309,12 @@ class SlideLayoutsTests {
 		return new Deck(deckTitle, subtitle, "focus", sections, new Section("list", title, message, "", closing));
 	}
 
+	@Test
+	void generatedTextDropsEmojiAndDecorations() {
+		assertThat(PresentationGeneration.clean("\uD83D\uDE80 \u2605 매출  12% \u2192 증가\u2705"))
+			.isEqualTo("매출 12% 증가");
+		assertThat(PresentationGeneration.clean("- 영하 3\u2103, 84\u33A1")).isEqualTo("영하 3\u2103, 84\u33A1");
+		assertThat(PresentationGeneration.clean("\uD83D\uDC4D\uD83C\uDFFB")).isEmpty();
+	}
+
 }
