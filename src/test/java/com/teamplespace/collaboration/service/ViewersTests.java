@@ -71,6 +71,21 @@ class ViewersTests {
 	}
 
 	@Test
+	void lateNoticeFromAClosedWindowDoesNotOverrideAnotherOpenWindow() {
+		// A 창 알림, B 창 알림, A 창 떠남 뒤에 늦게 온 A 창 알림은 버리고 B 창 탭을 보여 준다
+		viewers.view(owner, project, "materials", "a", 1L);
+		viewers.view(owner, project, "design", "b", 1L);
+		viewers.view(owner, project, null, "a", 3L);
+		viewers.view(owner, project, "outline", "a", 2L);
+		assertThat(viewers.others(project, member.userId()))
+			.containsExactly(new Viewers.Viewer(owner.userId(), "design"));
+
+		// 남은 창도 떠나면 빠진다
+		viewers.view(owner, project, null, "b", 2L);
+		assertThat(viewers.others(project, member.userId())).isEmpty();
+	}
+
+	@Test
 	void expiryCleanupDoesNotDropConcurrentUpdates() throws Exception {
 		// 만료 정리와 새 알림이 겹쳐도 마지막 알림은 남는다
 		for (int round = 0; round < 200; round++) {
