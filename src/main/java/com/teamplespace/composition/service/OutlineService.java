@@ -114,6 +114,17 @@ public class OutlineService {
 		return writeReplacement(actor, projectId, current, outlineId, replacement(projectId, current.id(), input));
 	}
 
+	// 새 자료를 반영한 항목을 그대로 저장한다. 호출자는 프로젝트 잠금을 보유하고 발행 직전 원본을 다시 확인한다
+	Outline publishItems(UUID actor, UUID projectId, List<Item> items) {
+		OutlineRow current = find(projectId);
+		List<Item> positioned = new ArrayList<>();
+		for (int position = 0; position < items.size(); position++) {
+			Item item = items.get(position);
+			positioned.add(new Item(item.id(), item.title(), item.summary(), position, item.sourceRefs()));
+		}
+		return writeReplacement(actor, projectId, current, current.id(), List.copyOf(positioned));
+	}
+
 	private Outline writeReplacement(UUID actor, UUID projectId, OutlineRow current, UUID outlineId, List<Item> replacement) {
 		long version = current.version() + 1;
 		if (current.id() == null) {
