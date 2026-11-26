@@ -34,6 +34,7 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 	private static final AtomicInteger calls = new AtomicInteger();
 	private static final AtomicReference<String> answer = new AtomicReference<>();
 	private static final AtomicReference<JsonNode> providerRequest = new AtomicReference<>();
+	private static final AtomicReference<JsonNode> rawOutput = new AtomicReference<>();
 	private static final HttpServer provider = startProvider();
 
 	@Autowired
@@ -56,6 +57,7 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 		calls.set(0);
 		answer.set("정리한 핵심 내용입니다.");
 		providerRequest.set(null);
+		rawOutput.set(null);
 	}
 
 	@AfterAll
@@ -115,6 +117,12 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 		JsonNode saved = owner.get(path);
 		assertThat(ContractSchemas.validate("stage-2.schema.json#/$defs/Material", json.writeValueAsString(saved))).isEmpty();
 		assertThat(saved.path("currentRevision").path("summary").asString()).isEqualTo(answer.get());
+		JsonNode analysis = saved.path("currentRevision").path("analysis");
+		assertThat(analysis.path("overview").asString()).isEqualTo(answer.get());
+		assertThat(analysis.path("keyPoints").get(0).path("claim").asString()).isEqualTo("핵심 논점");
+		assertThat(analysis.path("keyPoints").get(0).path("evidence").asString()).isEqualTo("원문 근거");
+		assertThat(analysis.path("presentationPoints").get(0).asString()).isEqualTo("발표 포인트");
+		assertThat(sent.path("text").path("format").path("name").asString()).isEqualTo("material_analysis");
 		assertThat(saved.path("currentRevision").path("excerpt")).isEqualTo(material.path("currentRevision").path("excerpt"));
 		assertThat(saved.path("version")).isEqualTo(material.path("version"));
 		assertThat(saved.path("summaryJob").path("status").asString()).isEqualTo("succeeded");
@@ -178,6 +186,36 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 		assertThat(owner.get(path + "/source").path("markdown").asString()).isEqualTo("본문");
 	}
 
+	@Test
+	void anAnalysisWithoutKeyPointsFailsAndAnOldSummaryCanBeAnalyzedAgain() throws Exception {
+		Browser owner = signup("분석 형식 검증");
+		String project = createProject(owner, "분석 형식");
+		JsonNode material = memo(owner, project, "자료", "본문");
+		String path = materialPath(material);
+		var input = Map.of("expectedRevisionId", revision(material));
+		var broken = PROVIDER_JSON.createObjectNode().put("overview", "개요");
+		broken.putArray("keyPoints");
+		broken.putArray("presentationPoints").add("발표 포인트");
+		rawOutput.set(broken);
+		JsonNode first = owner.post(path + "/summary-jobs", input, 202);
+		jobs.run(claim(first));
+		assertThat(owner.get(jobPath(first)).path("error").path("code").asString())
+			.isEqualTo("JOB_MATERIAL_SUMMARY_INVALID_RESULT");
+
+		jdbc.sql("UPDATE material_revisions SET summary = '이전 요약' WHERE id = UUID_TO_BIN(?)")
+			.param(revision(material)).update();
+		JsonNode old = owner.get(path).path("currentRevision");
+		assertThat(old.path("summary").asString()).isEqualTo("이전 요약");
+		assertThat(old.path("analysis").isNull()).isTrue();
+		rawOutput.set(null);
+		JsonNode retried = owner.post(path + "/summary-jobs", input, 202);
+		jobs.run(claim(retried));
+		JsonNode saved = owner.get(path).path("currentRevision");
+		assertThat(saved.path("summary").asString()).isEqualTo(answer.get());
+		assertThat(saved.path("analysis").path("presentationPoints").size()).isEqualTo(1);
+		owner.post(path + "/summary-jobs", input, 409);
+	}
+
 	private JsonNode memo(Browser browser, String project, String title, String markdown) throws Exception {
 		return browser.post("/projects/" + project + "/materials/memo", Map.of("title", title, "markdown", markdown), 201)
 			.path("material");
@@ -223,7 +261,13 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 				http.sendResponseHeaders(503, -1);
 				return;
 			}
-			var output = PROVIDER_JSON.createObjectNode().put("summary", answer.get());
+			JsonNode output = rawOutput.get();
+			if (output == null) {
+				var analysis = PROVIDER_JSON.createObjectNode().put("overview", answer.get());
+				analysis.putArray("keyPoints").addObject().put("claim", "핵심 논점").put("evidence", "원문 근거");
+				analysis.putArray("presentationPoints").add("발표 포인트");
+				output = analysis;
+			}
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			response.putArray("output").addObject().put("type", "message").putArray("content")
 				.addObject().put("type", "output_text").put("text", PROVIDER_JSON.writeValueAsString(output));
