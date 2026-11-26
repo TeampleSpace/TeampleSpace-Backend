@@ -25,13 +25,13 @@ import tools.jackson.databind.node.ObjectNode;
 public class MaterialSummary implements JobHandler {
 
 	static final String TYPE = "material_summary";
-	private static final String PROMPT_VERSION = "material-summary-v1";
+	private static final String PROMPT_VERSION = "material-analysis-v1";
 	private static final int INPUT_CHARACTERS = 20_000;
 
 	record Input(UUID materialId, String title, String model, String promptVersion) {
 	}
 
-	private record Source(String summary, String text) {
+	private record Source(String analysis, String text) {
 	}
 
 	private final JdbcClient jdbc;
@@ -72,12 +72,13 @@ public class MaterialSummary implements JobHandler {
 			throw new ApiException(ErrorCode.MATERIAL_STATE_CONFLICT);
 		}
 		Source source = source(row);
-		if (source.summary() != null) {
+		// 분석 정리가 없는 이전 요약 개정은 다시 분석할 수 있다
+		if (source.analysis() != null) {
 			throw new ApiException(ErrorCode.MATERIAL_STATE_CONFLICT);
 		}
 		if (source.text().isEmpty()) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "expectedRevisionId", "SOURCE_EMPTY",
-					"요약할 본문이 없어요.");
+					"분석할 본문이 없어요.");
 		}
 		boolean active = jdbc.sql("""
 				SELECT 1 FROM jobs WHERE project_id = UUID_TO_BIN(?) AND target_type = ?
@@ -104,19 +105,22 @@ public class MaterialSummary implements JobHandler {
 	public Object execute(JobQueue.Job job) {
 		Input input = input(job);
 		Source source = source(current(job, input, false));
-		if (source.summary() != null || source.text().isEmpty()) {
+		if (source.analysis() != null || source.text().isEmpty()) {
 			throw stale();
 		}
-		return provider.summarize(input.model(), input.title(), source.text());
+		return provider.analyze(input.model(), input.title(), source.text());
 	}
 
 	@Override
 	public ObjectNode publish(JobQueue.Job job, Object output) {
 		MaterialService.Row row = current(job, input(job), true);
+		JsonNode analysis = (JsonNode) output;
+		// summary에는 개요를 함께 남겨 요약 문장만 읽는 화면과 호환한다
 		int updated = jdbc.sql("""
-				UPDATE material_revisions SET summary = ?
-				WHERE project_id = UUID_TO_BIN(?) AND material_id = UUID_TO_BIN(?) AND id = UUID_TO_BIN(?) AND summary IS NULL
-				""").params(output, row.projectId().toString(), row.id().toString(), job.targetId().toString()).update();
+				UPDATE material_revisions SET summary = ?, analysis = ?
+				WHERE project_id = UUID_TO_BIN(?) AND material_id = UUID_TO_BIN(?) AND id = UUID_TO_BIN(?) AND analysis IS NULL
+				""").params(analysis.path("overview").asString(), json.writeValueAsString(analysis), row.projectId().toString(),
+						row.id().toString(), job.targetId().toString()).update();
 		if (updated == 0) {
 			throw stale();
 		}
@@ -125,7 +129,7 @@ public class MaterialSummary implements JobHandler {
 
 	@Override
 	public void settle(JobQueue.Job job, String status) {
-		// 요약 작업이 실패하거나 취소되어도 원문과 분석 상태는 유지한다
+		// 분석 정리 작업이 실패하거나 취소되어도 원문과 원문 분석 상태는 유지한다
 	}
 
 	private Input input(JobQueue.Job job) {
@@ -141,7 +145,7 @@ public class MaterialSummary implements JobHandler {
 			access.requireMember(job.projectId(), job.requesterId());
 		}
 		catch (ApiException ex) {
-			throw new JobFailure("JOB_MATERIAL_SUMMARY_ACCESS_REVOKED", "프로젝트 접근 권한이 없어 요약하지 않았어요.", false);
+			throw new JobFailure("JOB_MATERIAL_SUMMARY_ACCESS_REVOKED", "프로젝트 접근 권한이 없어 분석하지 않았어요.", false);
 		}
 		MaterialService.Row row = materials.find(input.materialId(), lock);
 		if (row.deleted() || !row.projectId().equals(job.projectId())) {
@@ -159,10 +163,10 @@ public class MaterialSummary implements JobHandler {
 
 	private Source source(MaterialService.Row row) {
 		return jdbc.sql("""
-				SELECT summary, LEFT(COALESCE(markdown, extracted_text, ''), ?) AS body FROM material_revisions
+				SELECT analysis, LEFT(COALESCE(markdown, extracted_text, ''), ?) AS body FROM material_revisions
 				WHERE project_id = UUID_TO_BIN(?) AND material_id = UUID_TO_BIN(?) AND id = UUID_TO_BIN(?)
 				""").params(INPUT_CHARACTERS, row.projectId().toString(), row.id().toString(), row.currentRevisionId().toString())
-			.query((rs, index) -> new Source(rs.getString("summary"), MaterialAnalysis.clean(rs.getString("body"))))
+			.query((rs, index) -> new Source(rs.getString("analysis"), MaterialAnalysis.clean(rs.getString("body"))))
 			.single();
 	}
 
@@ -180,10 +184,10 @@ public class MaterialSummary implements JobHandler {
 			}
 		}
 		throw ApiException.field(ErrorCode.VALIDATION_FAILED, "expectedRevisionId", "INVALID_REVISION",
-				"요약할 원문 개정을 확인해 주세요.");
+				"분석할 원문 개정을 확인해 주세요.");
 	}
 
 	private static JobFailure stale() {
-		return new JobFailure("JOB_INPUT_STALE", "원문이 변경됐어요. 현재 자료에서 요약을 다시 요청해 주세요.", false);
+		return new JobFailure("JOB_INPUT_STALE", "원문이 변경됐어요. 현재 자료에서 분석을 다시 요청해 주세요.", false);
 	}
 }
