@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.teamplespace.collaboration.service.EventStreams;
 import com.teamplespace.collaboration.service.Presence;
+import com.teamplespace.collaboration.service.Viewers;
 import com.teamplespace.identity.service.AuthService;
 import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
@@ -50,12 +51,19 @@ public class EditorController {
 	private final DocumentCommands commands;
 	private final Presence presence;
 
+	private final Viewers viewers;
+
+	// 지금 보는 프로젝트 탭. 탭이 없으면 프로젝트 화면을 떠난 것이다
+	record ViewingRequest(String tab) {
+	}
+
 	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
 	record PresenceRequest(UUID slideId, Double x, Double y) {
 	}
 
 	public EditorController(AuthService auth, ElementPatchService patches, PresentationSnapshots snapshots,
-			EventStreams streams, SamplePresentations samples, Presence presence, DocumentCommands commands) {
+			EventStreams streams, SamplePresentations samples, Presence presence, Viewers viewers,
+			DocumentCommands commands) {
 		this.auth = auth;
 		this.patches = patches;
 		this.commands = commands;
@@ -63,6 +71,7 @@ public class EditorController {
 		this.streams = streams;
 		this.samples = samples;
 		this.presence = presence;
+		this.viewers = viewers;
 	}
 
 	@PatchMapping("/slides/{slideId}/elements/{elementId}")
@@ -125,6 +134,13 @@ public class EditorController {
 	ResponseEntity<Void> presence(@PathVariable UUID projectId, @RequestBody PresenceRequest input,
 			HttpServletRequest request) {
 		presence.update(actor(request), projectId, input.slideId(), input.x(), input.y());
+		return ResponseEntity.noContent().build();
+	}
+
+	@PutMapping("/projects/{projectId}/viewing")
+	ResponseEntity<Void> viewing(@PathVariable UUID projectId, @RequestBody ViewingRequest input,
+			HttpServletRequest request) {
+		viewers.view(actor(request), projectId, input.tab());
 		return ResponseEntity.noContent().build();
 	}
 

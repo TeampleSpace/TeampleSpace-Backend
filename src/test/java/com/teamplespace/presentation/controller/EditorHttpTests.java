@@ -275,6 +275,40 @@ class EditorHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void viewedTabsReachOtherMembersAndClearWhenTheyLeave() throws Exception {
+		Browser owner = signup("소유자");
+		Browser member = signup("팀원");
+		Browser stranger = signup("외부인");
+		String project = createProject(owner, "보는 탭");
+		join(owner, member, project);
+		String path = "/projects/" + project + "/viewing";
+
+		Iterator<String> stream = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
+
+		ObjectNode tab = json.createObjectNode().put("tab", "materials");
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", tab.toString())).isEmpty();
+		owner.request("PUT", path, tab, 204);
+		// 내 탭은 내 구독으로 오지 않는다
+		member.request("PUT", path, json.createObjectNode().put("tab", "outline"), 204);
+		Map<String, String> viewed = firstNamed(stream, "viewers.updated");
+		assertThat(viewed).doesNotContainKey("id");
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewersUpdated", viewed.get("data"))).isEmpty();
+		JsonNode viewers = json.readTree(viewed.get("data")).get("viewers");
+		assertThat(viewers).hasSize(1);
+		assertThat(viewers.get(0).get("userId").asString()).isEqualTo(owner.userId);
+		assertThat(viewers.get(0).get("tab").asString()).isEqualTo("materials");
+
+		// 떠나면 빈 목록이 온다
+		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
+
+		// 팀원이 아니면 보낼 수 없고 모르는 탭은 입력 오류다
+		stranger.request("PUT", path, tab, 404);
+		JsonNode invalid = owner.request("PUT", path, json.createObjectNode().put("tab", "admin"), 422);
+		assertThat(invalid.get("error").get("code").asString()).isEqualTo("VALIDATION_FAILED");
+	}
+
+	@Test
 	void subscriptionEndsWhenEventLookupFailsSoClientCanReconnect() throws Exception {
 		Browser owner = signup("소유자");
 		String project = createProject(owner, "조회 실패");

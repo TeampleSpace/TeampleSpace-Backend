@@ -5,6 +5,11 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-26 프로젝트 탭 접속 현황 추가
+
+- 보는 탭 경로 `PUT /v1/projects/{projectId}/viewing`과 `ViewingRequest`, `ProjectTab`, `ViewersUpdated` 형식을 추가
+- 이벤트 구독은 나를 뺀 팀원의 탭 목록이 바뀔 때 `viewers.updated`를 SSE `id` 없이 보낸다. 이벤트 순번과 재연결 커서에는 영향이 없다
+
 ## 2026-11-26 발표 생성 결과 검증 실패의 재시도
 
 - `JOB_PRESENTATION_INVALID_RESULT`의 `retryable`을 true로 바꿨다. 결과가 맞지 않으면 남은 시도 횟수 안에서 다시 생성하고, 시도를 다 쓴 뒤에도 사용자가 다시 요청할 수 있다
