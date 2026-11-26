@@ -14,8 +14,8 @@ import tools.jackson.databind.JsonNode;
 // 구성과 발표 생성 요청이 함께 쓰는 입력 검사
 public record OutlineInput(long expectedVersion, List<Item> items) {
 	static final long MAX_VERSION = 9_007_199_254_740_991L;
-	private static final int MAX_ITEMS = 100;
-	private static final int MAX_SOURCES = 20;
+	static final int MAX_ITEMS = 100;
+	static final int MAX_SOURCES = 20;
 	private static final Set<String> ROOT_FIELDS = Set.of("expectedVersion", "items");
 	private static final Set<String> ITEM_FIELDS = Set.of("id", "title", "summary", "sourceIds");
 
