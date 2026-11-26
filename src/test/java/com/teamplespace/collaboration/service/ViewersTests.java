@@ -51,4 +51,20 @@ class ViewersTests {
 		assertThat(viewers.others(project, member.userId())).isEmpty();
 	}
 
+	@Test
+	void expiryCleanupDoesNotDropConcurrentUpdates() throws Exception {
+		// 만료 정리와 새 알림이 겹쳐도 마지막 알림은 남는다
+		for (int round = 0; round < 200; round++) {
+			UUID room = UUID.randomUUID();
+			viewers.view(owner, room, "materials", null);
+			clock.advance(Viewers.TTL.plus(Duration.ofSeconds(1)));
+			Thread cleaner = new Thread(() -> viewers.others(room, member.userId()));
+			cleaner.start();
+			viewers.view(member, room, "outline", null);
+			cleaner.join();
+			assertThat(viewers.others(room, owner.userId()))
+				.containsExactly(new Viewers.Viewer(member.userId(), "outline"));
+		}
+	}
+
 }

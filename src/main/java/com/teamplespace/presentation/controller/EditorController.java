@@ -53,10 +53,6 @@ public class EditorController {
 
 	private final Viewers viewers;
 
-	// 지금 보는 프로젝트 탭. 탭이 없으면 프로젝트 화면을 떠난 것이다
-	record ViewingRequest(String tab, String viewId) {
-	}
-
 	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
 	record PresenceRequest(UUID slideId, Double x, Double y) {
 	}
@@ -137,10 +133,20 @@ public class EditorController {
 		return ResponseEntity.noContent().build();
 	}
 
+	// 지금 보는 프로젝트 탭. tab은 꼭 실어야 하고 명시한 null만 프로젝트 화면을 떠난 것으로 본다
 	@PutMapping("/projects/{projectId}/viewing")
-	ResponseEntity<Void> viewing(@PathVariable UUID projectId, @RequestBody ViewingRequest input,
-			HttpServletRequest request) {
-		viewers.view(actor(request), projectId, input.tab(), input.viewId());
+	ResponseEntity<Void> viewing(@PathVariable UUID projectId, @RequestBody JsonNode body, HttpServletRequest request) {
+		Actor actor = actor(request);
+		JsonNode tab = body.get("tab");
+		if (tab == null || !(tab.isNull() || tab.isString())) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "tab", "REQUIRED", "탭 이름을 확인해 주세요.");
+		}
+		JsonNode viewId = body.path("viewId");
+		if (!viewId.isMissingNode() && !viewId.isString()) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
+		}
+		viewers.view(actor, projectId, tab.isNull() ? null : tab.asString(),
+				viewId.isMissingNode() ? null : viewId.asString());
 		return ResponseEntity.noContent().build();
 	}
 

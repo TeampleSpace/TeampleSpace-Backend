@@ -52,33 +52,34 @@ public class Viewers {
 		if (viewId != null && (viewId.isBlank() || viewId.length() > 64)) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
 		}
-		if (tab == null) {
-			Map<UUID, Entry> users = projects.get(projectId);
-			if (users != null) {
-				users.computeIfPresent(actor.userId(),
-						(key, entry) -> viewId == null || viewId.equals(entry.viewId()) ? null : entry);
-			}
-			return;
-		}
-		if (!TABS.contains(tab)) {
+		if (tab != null && !TABS.contains(tab)) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "tab", "INVALID", "탭 이름을 확인해 주세요.");
 		}
-		projects.computeIfAbsent(projectId, key -> new ConcurrentHashMap<>())
-			.put(actor.userId(), new Entry(new Viewer(actor.userId(), tab), viewId, clock.instant()));
+		// 프로젝트별 갱신과 빈 목록 정리를 같은 원자적 연산으로 처리해 정리 중인 목록에 쓴 알림이 사라지지 않게 한다
+		projects.compute(projectId, (key, users) -> {
+			Map<UUID, Entry> next = users != null ? users : new ConcurrentHashMap<>();
+			if (tab != null) {
+				next.put(actor.userId(), new Entry(new Viewer(actor.userId(), tab), viewId, clock.instant()));
+			}
+			else {
+				next.computeIfPresent(actor.userId(),
+						(user, entry) -> viewId == null || viewId.equals(entry.viewId()) ? null : entry);
+			}
+			return next.isEmpty() ? null : next;
+		});
 	}
 
 	// 나를 뺀 팀원의 탭. 순서를 고정해 바뀌었는지 목록 비교로 알 수 있게 한다
 	public List<Viewer> others(UUID projectId, UUID userId) {
-		Map<UUID, Entry> users = projects.get(projectId);
+		Instant expired = clock.instant().minus(TTL);
+		Map<UUID, Entry> users = projects.computeIfPresent(projectId, (key, current) -> {
+			current.values().removeIf(entry -> entry.at().isBefore(expired));
+			return current.isEmpty() ? null : current;
+		});
 		if (users == null) {
 			return List.of();
 		}
-		Instant expired = clock.instant().minus(TTL);
-		users.values().removeIf(entry -> entry.at().isBefore(expired));
-		if (users.isEmpty()) {
-			projects.remove(projectId, users);
-		}
-		return users.values()
+		return List.copyOf(users.values())
 			.stream()
 			.map(Entry::viewer)
 			.filter(viewer -> !viewer.userId().equals(userId))

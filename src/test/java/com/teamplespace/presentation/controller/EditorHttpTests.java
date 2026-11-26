@@ -306,6 +306,14 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		stranger.request("PUT", path, tab, 404);
 		JsonNode invalid = owner.request("PUT", path, json.createObjectNode().put("tab", "admin"), 422);
 		assertThat(invalid.get("error").get("code").asString()).isEqualTo("VALIDATION_FAILED");
+
+		// tab이 빠진 요청은 떠남이 아니라 입력 오류라 보던 탭을 지우지 않는다
+		owner.request("PUT", path, tab, 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).hasSize(1);
+		owner.request("PUT", path, json.createObjectNode(), 422);
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", "{}")).isNotEmpty();
+		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
 	}
 
 	@Test
