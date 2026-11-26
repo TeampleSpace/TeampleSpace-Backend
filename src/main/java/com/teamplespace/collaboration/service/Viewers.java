@@ -25,8 +25,14 @@ public class Viewers {
 	public record Viewer(UUID userId, String tab) {
 	}
 
-	// 창마다 다른 viewId로 어느 창의 알림인지 구분한다
-	private record Entry(Viewer viewer, String viewId, Instant at) {
+	// 창마다 다른 viewId로 어느 창의 알림인지 구분하고 seq로 같은 창의 알림 순서를 맞춘다
+	// 떠난 창은 tab 없이 남겨 늦게 도착한 그 창의 이전 알림이 다시 등록하지 못하게 한다
+	private record Entry(UUID userId, String tab, String viewId, Long seq, Instant at) {
+
+		boolean newerThan(String otherViewId, Long otherSeq) {
+			return viewId != null && viewId.equals(otherViewId) && seq != null && otherSeq != null && otherSeq <= seq;
+		}
+
 	}
 
 	static final Set<String> TABS = Set.of("overview", "materials", "outline", "design", "slides", "settings");
@@ -47,25 +53,36 @@ public class Viewers {
 
 	// 탭이 없으면 프로젝트 화면을 떠난 것이다. 같은 사람의 여러 창은 마지막 알림 하나로 본다
 	// 떠난 창이 마지막으로 알린 창이 아니면 지우지 않는다. 새로고침 때 이전 페이지의 떠남이 늦게 도착해도 새 페이지가 남는다
-	public void view(Actor actor, UUID projectId, String tab, String viewId) {
+	// 같은 창의 알림은 seq가 더 큰 것만 받는다. 늦게 도착한 이전 알림이 최신 상태를 덮지 않는다
+	public void view(Actor actor, UUID projectId, String tab, String viewId, Long seq) {
 		access.requireMember(projectId, actor.userId());
 		if (viewId != null && (viewId.isBlank() || viewId.length() > 64)) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
 		}
+		if (seq != null && seq < 0) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "seq", "INVALID", "알림 순번을 확인해 주세요.");
+		}
 		if (tab != null && !TABS.contains(tab)) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "tab", "INVALID", "탭 이름을 확인해 주세요.");
 		}
+		Entry next = new Entry(actor.userId(), tab, viewId, seq, clock.instant());
 		// 프로젝트별 갱신과 빈 목록 정리를 같은 원자적 연산으로 처리해 정리 중인 목록에 쓴 알림이 사라지지 않게 한다
 		projects.compute(projectId, (key, users) -> {
-			Map<UUID, Entry> next = users != null ? users : new ConcurrentHashMap<>();
-			if (tab != null) {
-				next.put(actor.userId(), new Entry(new Viewer(actor.userId(), tab), viewId, clock.instant()));
-			}
-			else {
-				next.computeIfPresent(actor.userId(),
-						(user, entry) -> viewId == null || viewId.equals(entry.viewId()) ? null : entry);
-			}
-			return next.isEmpty() ? null : next;
+			Map<UUID, Entry> current = users != null ? users : new ConcurrentHashMap<>();
+			current.compute(actor.userId(), (user, entry) -> {
+				if (entry != null && entry.newerThan(viewId, seq)) {
+					return entry;
+				}
+				if (tab == null) {
+					// 다른 창이 마지막으로 알렸으면 그 창을 남긴다
+					if (entry != null && viewId != null && entry.tab() != null && !viewId.equals(entry.viewId())) {
+						return entry;
+					}
+					return viewId == null ? null : next;
+				}
+				return next;
+			});
+			return current.isEmpty() ? null : current;
 		});
 	}
 
@@ -81,7 +98,8 @@ public class Viewers {
 		}
 		return List.copyOf(users.values())
 			.stream()
-			.map(Entry::viewer)
+			.filter(entry -> entry.tab() != null)
+			.map(entry -> new Viewer(entry.userId(), entry.tab()))
 			.filter(viewer -> !viewer.userId().equals(userId))
 			.sorted(Comparator.comparing(Viewer::userId))
 			.toList();

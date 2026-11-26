@@ -285,7 +285,7 @@ class EditorHttpTests extends HttpIntegrationSupport {
 
 		Iterator<String> stream = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
 
-		ObjectNode tab = json.createObjectNode().put("tab", "materials").put("viewId", "view-a");
+		ObjectNode tab = json.createObjectNode().put("tab", "materials").put("viewId", "view-a").put("seq", 1);
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", tab.toString())).isEmpty();
 		owner.request("PUT", path, tab, 204);
 		// 내 탭은 내 구독으로 오지 않는다
@@ -314,6 +314,7 @@ class EditorHttpTests extends HttpIntegrationSupport {
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", "{}")).isNotEmpty();
 		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
 		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
+		owner.request("PUT", path, json.createObjectNode().put("tab", "outline").put("seq", "x"), 422);
 	}
 
 	@Test

@@ -145,8 +145,12 @@ public class EditorController {
 		if (!viewId.isMissingNode() && !viewId.isString()) {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
 		}
+		JsonNode seq = body.path("seq");
+		if (!seq.isMissingNode() && !seq.canConvertToLong()) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "seq", "INVALID", "알림 순번을 확인해 주세요.");
+		}
 		viewers.view(actor, projectId, tab.isNull() ? null : tab.asString(),
-				viewId.isMissingNode() ? null : viewId.asString());
+				viewId.isMissingNode() ? null : viewId.asString(), seq.isMissingNode() ? null : seq.asLong());
 		return ResponseEntity.noContent().build();
 	}
 
