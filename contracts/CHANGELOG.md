@@ -12,6 +12,11 @@
 - `featureFlags.materialResearch`를 추가
 - 작업 실패 코드 `JOB_RESEARCH_PROVIDER_UNAVAILABLE`, `JOB_RESEARCH_INVALID_RESULT`, `JOB_RESEARCH_ACCESS_REVOKED`를 추가
 
+## 2026-11-26 발표 생성 문구 규칙 보완
+
+- 발표 생성 고정 입력의 `promptVersion`을 `presentation-v5`로 바꿨다. 이전 값으로 등록된 작업은 실행할 때 `JOB_INPUT_STALE`로 끝난다
+- 생성한 글에서 이모지와 장식 기호를 지우고 공백을 정리한 뒤 길이를 검사한다
+
 ## 2026-11-26 기존 구성에 새 자료 반영
 
 - `OutlineJobRequest`와 `OutlineJobInput`에 선택 값 `mode`(`replace`, `extend`)를 추가했다. 값이 없으면 지금처럼 구성 전체를 바꾼다
