@@ -79,4 +79,29 @@ class MemoHttpTests extends HttpIntegrationSupport {
 		owner.request("POST", path, Map.of("data", "%%%"), 422);
 	}
 
+	@Test
+	void cursorStatesReachMembersWithoutBeingStored() throws Exception {
+		Browser owner = signup("소유자");
+		Browser member = signup("팀원");
+		Browser stranger = signup("외부인");
+		String project = createProject(owner, "메모 커서");
+		join(owner, member, project);
+		String id = memo(owner, project);
+		String path = "/materials/" + id + "/memo-awareness";
+
+		Iterator<String> stream = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
+		Map<String, Object> state = Map.of("data", piece("cursor"));
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/MemoAwarenessRequest", json.writeValueAsString(state)))
+			.isEmpty();
+		owner.request("POST", path, state, 204);
+		Map<String, String> live = firstNamed(stream, "memo.awareness");
+		assertThat(live).doesNotContainKey("id");
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/MemoAwareness", live.get("data"))).isEmpty();
+		assertThat(json.readTree(live.get("data")).get("data").asString()).isEqualTo(piece("cursor"));
+
+		stranger.request("POST", path, state, 404);
+		owner.request("POST", path, Map.of("data", ""), 422);
+		owner.request("POST", path, Map.of("data", Base64.getEncoder().encodeToString(new byte[17 * 1024])), 413);
+	}
+
 }

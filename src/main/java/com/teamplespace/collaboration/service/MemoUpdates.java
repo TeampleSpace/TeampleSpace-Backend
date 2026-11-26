@@ -30,6 +30,9 @@ public class MemoUpdates {
 
 	static final int COMPACT_MAX = 8 * 1024 * 1024;
 
+	// 커서 상태 한 번의 최대 크기
+	static final int AWARENESS_MAX = 16 * 1024;
+
 	private static final int PAGE = 500;
 
 	private final JdbcClient jdbc;
@@ -101,6 +104,14 @@ public class MemoUpdates {
 			.param("data", bytes)
 			.param("actor", actor.userId().toString())
 			.update();
+	}
+
+	// 커서 상태는 저장하지 않는다. 보낼 수 있는지만 확인하고 프로젝트를 돌려준다
+	@Transactional(readOnly = true)
+	public UUID awareness(Actor actor, UUID materialId, String data) {
+		UUID projectId = memo(actor, materialId, false);
+		decode(data, AWARENESS_MAX);
+		return projectId;
 	}
 
 	// 지운 자료나 메모가 아닌 자료, 팀원이 아닌 사람에게는 없는 경로처럼 응답한다
