@@ -5,6 +5,11 @@
 
 지금의 기준 커밋은 `1784978`이다. 스키마, 예제, 오류 목록이 마지막으로 바뀐 커밋이다.
 
+## 2026-11-26 기존 구성에 새 자료 반영
+
+- `OutlineJobRequest`와 `OutlineJobInput`에 선택 값 `mode`(`replace`, `extend`)를 추가했다. 값이 없으면 지금처럼 구성 전체를 바꾼다
+- `extend`는 기존 항목을 그대로 두고 새 항목과 근거만 더한다. 저장된 구성이 없으면 422다
+
 ## 2026-11-26 자료 AI 요약을 분석 정리로 확장
 
 - 자료 상세의 `currentRevision`에 `analysis`를 추가했다. 개요 `overview`, 주요 논점과 근거 `keyPoints`, 발표 포인트 `presentationPoints`를 담고 분석 전에는 null이다
