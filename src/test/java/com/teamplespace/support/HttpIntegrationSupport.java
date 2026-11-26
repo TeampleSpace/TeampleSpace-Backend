@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -197,6 +198,27 @@ public abstract class HttpIntegrationSupport {
 				return messages;
 			}).get(10, TimeUnit.SECONDS);
 		}
+	}
+
+	// 이름이 같은 첫 신호를 받을 때까지 읽는다. 연결은 열어 둔다
+	protected Map<String, String> firstNamed(Iterator<String> iterator, String name) throws Exception {
+		return CompletableFuture.supplyAsync(() -> {
+			Map<String, String> current = new LinkedHashMap<>();
+			while (iterator.hasNext()) {
+				String line = iterator.next();
+				int colon = line.indexOf(':');
+				if (line.isEmpty()) {
+					if (name.equals(current.get("event"))) {
+						return current;
+					}
+					current = new LinkedHashMap<>();
+				}
+				else if (colon > 0) {
+					current.put(line.substring(0, colon), line.substring(colon + 1).strip());
+				}
+			}
+			throw new IllegalStateException(name + " 신호를 받기 전에 연결이 끝났다");
+		}).get(10, TimeUnit.SECONDS);
 	}
 
 	protected Browser signup(String name) throws Exception {
