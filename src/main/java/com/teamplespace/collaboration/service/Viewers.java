@@ -25,7 +25,8 @@ public class Viewers {
 	public record Viewer(UUID userId, String tab) {
 	}
 
-	private record Entry(Viewer viewer, Instant at) {
+	// 창마다 다른 viewId로 어느 창의 알림인지 구분한다
+	private record Entry(Viewer viewer, String viewId, Instant at) {
 	}
 
 	static final Set<String> TABS = Set.of("overview", "materials", "outline", "design", "slides", "settings");
@@ -45,12 +46,17 @@ public class Viewers {
 	}
 
 	// 탭이 없으면 프로젝트 화면을 떠난 것이다. 같은 사람의 여러 창은 마지막 알림 하나로 본다
-	public void view(Actor actor, UUID projectId, String tab) {
+	// 떠난 창이 마지막으로 알린 창이 아니면 지우지 않는다. 새로고침 때 이전 페이지의 떠남이 늦게 도착해도 새 페이지가 남는다
+	public void view(Actor actor, UUID projectId, String tab, String viewId) {
 		access.requireMember(projectId, actor.userId());
+		if (viewId != null && (viewId.isBlank() || viewId.length() > 64)) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
+		}
 		if (tab == null) {
 			Map<UUID, Entry> users = projects.get(projectId);
 			if (users != null) {
-				users.remove(actor.userId());
+				users.computeIfPresent(actor.userId(),
+						(key, entry) -> viewId == null || viewId.equals(entry.viewId()) ? null : entry);
 			}
 			return;
 		}
@@ -58,7 +64,7 @@ public class Viewers {
 			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "tab", "INVALID", "탭 이름을 확인해 주세요.");
 		}
 		projects.computeIfAbsent(projectId, key -> new ConcurrentHashMap<>())
-			.put(actor.userId(), new Entry(new Viewer(actor.userId(), tab), clock.instant()));
+			.put(actor.userId(), new Entry(new Viewer(actor.userId(), tab), viewId, clock.instant()));
 	}
 
 	// 나를 뺀 팀원의 탭. 순서를 고정해 바뀌었는지 목록 비교로 알 수 있게 한다

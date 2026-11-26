@@ -285,7 +285,7 @@ class EditorHttpTests extends HttpIntegrationSupport {
 
 		Iterator<String> stream = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
 
-		ObjectNode tab = json.createObjectNode().put("tab", "materials");
+		ObjectNode tab = json.createObjectNode().put("tab", "materials").put("viewId", "view-a");
 		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", tab.toString())).isEmpty();
 		owner.request("PUT", path, tab, 204);
 		// 내 탭은 내 구독으로 오지 않는다

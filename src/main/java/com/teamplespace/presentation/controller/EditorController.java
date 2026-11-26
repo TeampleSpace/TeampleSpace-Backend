@@ -54,7 +54,7 @@ public class EditorController {
 	private final Viewers viewers;
 
 	// 지금 보는 프로젝트 탭. 탭이 없으면 프로젝트 화면을 떠난 것이다
-	record ViewingRequest(String tab) {
+	record ViewingRequest(String tab, String viewId) {
 	}
 
 	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
@@ -140,7 +140,7 @@ public class EditorController {
 	@PutMapping("/projects/{projectId}/viewing")
 	ResponseEntity<Void> viewing(@PathVariable UUID projectId, @RequestBody ViewingRequest input,
 			HttpServletRequest request) {
-		viewers.view(actor(request), projectId, input.tab());
+		viewers.view(actor(request), projectId, input.tab(), input.viewId());
 		return ResponseEntity.noContent().build();
 	}
 

@@ -403,7 +403,8 @@
       "additionalProperties": false,
       "required": ["tab"],
       "properties": {
-        "tab": { "anyOf": [{ "$ref": "#/$defs/ProjectTab" }, { "type": "null" }] }
+        "tab": { "anyOf": [{ "$ref": "#/$defs/ProjectTab" }, { "type": "null" }] },
+        "viewId": { "type": "string", "minLength": 1, "maxLength": 64, "description": "창마다 다른 값. 떠남은 같은 값으로 마지막에 알린 창일 때만 반영한다" }
       }
     },
     "ProjectTab": {
