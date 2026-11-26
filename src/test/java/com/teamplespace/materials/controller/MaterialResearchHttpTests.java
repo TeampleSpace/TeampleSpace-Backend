@@ -178,6 +178,7 @@ class MaterialResearchHttpTests extends HttpIntegrationSupport {
 			sources.addObject().put("title", "가이드").put("url", "https://example.org/guide/");
 			sources.addObject().put("title", "스크립트").put("url", "javascript:alert(1)");
 			sources.addObject().put("title", "다른 포트").put("url", "https://example.com:8443/survey");
+			sources.addObject().put("title", "다른 프로토콜").put("url", "http://example.org/guide");
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			var items = response.putArray("output");
 			if (searched.get()) {
