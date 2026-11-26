@@ -104,7 +104,8 @@ class MaterialResearchHttpTests extends HttpIntegrationSupport {
 		assertThat(ContractSchemas.validate("stage-2.schema.json#/$defs/MaterialResearchResult",
 				json.writeValueAsString(result))).isEmpty();
 		assertThat(result.path("topic").asString()).isEqualTo("대학생 AI 활용");
-		assertThat(result.path("markdown").asString()).startsWith("## 현황");
+		// 버린 출처의 인용은 지우고 남은 출처는 새 번호로 바꾼다
+		assertThat(result.path("markdown").asString()).isEqualTo("## 현황\n- 과제 조사에 많이 쓴다 [1]\n- 가이드가 있다 [2]");
 		assertThat(result.path("sources")).hasSize(2);
 		assertThat(result.path("sources").get(0).path("url").asString()).isEqualTo("https://example.com/survey");
 		assertThat(result.path("sources").get(1).path("url").asString()).isEqualTo("https://example.org/guide/");
@@ -169,13 +170,14 @@ class MaterialResearchHttpTests extends HttpIntegrationSupport {
 				http.sendResponseHeaders(503, -1);
 				return;
 			}
-			var output = PROVIDER_JSON.createObjectNode().put("markdown", "## 현황\n- 과제 조사에 많이 쓴다 [1]");
+			var output = PROVIDER_JSON.createObjectNode().put("markdown", "## 현황\n- 과제 조사에 많이 쓴다 [1] [2]\n- 가이드가 있다 [4] [6]");
 			var sources = output.putArray("sources");
 			sources.addObject().put("title", "대학생 AI 이용 조사").put("url", "https://example.com/survey");
 			sources.addObject().put("title", "만든 주소").put("url", "https://invented.example/page");
 			sources.addObject().put("title", "중복").put("url", "https://example.com/survey/");
 			sources.addObject().put("title", "가이드").put("url", "https://example.org/guide/");
 			sources.addObject().put("title", "스크립트").put("url", "javascript:alert(1)");
+			sources.addObject().put("title", "다른 포트").put("url", "https://example.com:8443/survey");
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			var items = response.putArray("output");
 			if (searched.get()) {
