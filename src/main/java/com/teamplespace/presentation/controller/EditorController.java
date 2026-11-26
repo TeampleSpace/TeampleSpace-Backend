@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.teamplespace.collaboration.service.EventStreams;
 import com.teamplespace.collaboration.service.Presence;
+import com.teamplespace.collaboration.service.Viewers;
 import com.teamplespace.identity.service.AuthService;
 import com.teamplespace.platform.error.ApiException;
 import com.teamplespace.platform.error.ErrorCode;
@@ -50,12 +51,15 @@ public class EditorController {
 	private final DocumentCommands commands;
 	private final Presence presence;
 
+	private final Viewers viewers;
+
 	// 커서 위치. 슬라이드가 없으면 편집 화면을 떠난 것이다
 	record PresenceRequest(UUID slideId, Double x, Double y) {
 	}
 
 	public EditorController(AuthService auth, ElementPatchService patches, PresentationSnapshots snapshots,
-			EventStreams streams, SamplePresentations samples, Presence presence, DocumentCommands commands) {
+			EventStreams streams, SamplePresentations samples, Presence presence, Viewers viewers,
+			DocumentCommands commands) {
 		this.auth = auth;
 		this.patches = patches;
 		this.commands = commands;
@@ -63,6 +67,7 @@ public class EditorController {
 		this.streams = streams;
 		this.samples = samples;
 		this.presence = presence;
+		this.viewers = viewers;
 	}
 
 	@PatchMapping("/slides/{slideId}/elements/{elementId}")
@@ -125,6 +130,27 @@ public class EditorController {
 	ResponseEntity<Void> presence(@PathVariable UUID projectId, @RequestBody PresenceRequest input,
 			HttpServletRequest request) {
 		presence.update(actor(request), projectId, input.slideId(), input.x(), input.y());
+		return ResponseEntity.noContent().build();
+	}
+
+	// 지금 보는 프로젝트 탭. tab은 꼭 실어야 하고 명시한 null만 프로젝트 화면을 떠난 것으로 본다
+	@PutMapping("/projects/{projectId}/viewing")
+	ResponseEntity<Void> viewing(@PathVariable UUID projectId, @RequestBody JsonNode body, HttpServletRequest request) {
+		Actor actor = actor(request);
+		JsonNode tab = body.get("tab");
+		if (tab == null || !(tab.isNull() || tab.isString())) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "tab", "REQUIRED", "탭 이름을 확인해 주세요.");
+		}
+		JsonNode viewId = body.path("viewId");
+		if (!viewId.isMissingNode() && !viewId.isString()) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "viewId", "INVALID", "창 식별자를 확인해 주세요.");
+		}
+		JsonNode seq = body.path("seq");
+		if (!seq.isMissingNode() && !(seq.isIntegralNumber() && seq.canConvertToLong())) {
+			throw ApiException.field(ErrorCode.VALIDATION_FAILED, "seq", "INVALID", "알림 순번을 확인해 주세요.");
+		}
+		viewers.view(actor, projectId, tab.isNull() ? null : tab.asString(),
+				viewId.isMissingNode() ? null : viewId.asString(), seq.isMissingNode() ? null : seq.asLong());
 		return ResponseEntity.noContent().build();
 	}
 

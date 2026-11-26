@@ -275,6 +275,59 @@ class EditorHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void viewedTabsReachOtherMembersAndClearWhenTheyLeave() throws Exception {
+		Browser owner = signup("소유자");
+		Browser member = signup("팀원");
+		Browser stranger = signup("외부인");
+		String project = createProject(owner, "보는 탭");
+		join(owner, member, project);
+		String path = "/projects/" + project + "/viewing";
+
+		Iterator<String> stream = member.lines("/projects/" + project + "/events", Map.of()).body().iterator();
+
+		ObjectNode tab = json.createObjectNode().put("tab", "materials").put("viewId", "view-a").put("seq", 1);
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", tab.toString())).isEmpty();
+		owner.request("PUT", path, tab, 204);
+		// 내 탭은 내 구독으로 오지 않는다
+		member.request("PUT", path, json.createObjectNode().put("tab", "outline"), 204);
+		Map<String, String> viewed = firstNamed(stream, "viewers.updated");
+		assertThat(viewed).doesNotContainKey("id");
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewersUpdated", viewed.get("data"))).isEmpty();
+		JsonNode viewers = json.readTree(viewed.get("data")).get("viewers");
+		assertThat(viewers).hasSize(1);
+		assertThat(viewers.get(0).get("userId").asString()).isEqualTo(owner.userId);
+		assertThat(viewers.get(0).get("tab").asString()).isEqualTo("materials");
+
+		// 떠나면 빈 목록이 온다
+		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
+
+		// 팀원이 아니면 보낼 수 없고 모르는 탭은 입력 오류다
+		stranger.request("PUT", path, tab, 404);
+		JsonNode invalid = owner.request("PUT", path, json.createObjectNode().put("tab", "admin"), 422);
+		assertThat(invalid.get("error").get("code").asString()).isEqualTo("VALIDATION_FAILED");
+
+		// tab이 빠진 요청은 떠남이 아니라 입력 오류라 보던 탭을 지우지 않는다
+		owner.request("PUT", path, tab, 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).hasSize(1);
+		owner.request("PUT", path, json.createObjectNode(), 422);
+		assertThat(ContractSchemas.validate("api.schema.json#/$defs/ViewingRequest", "{}")).isNotEmpty();
+		owner.request("PUT", path, json.createObjectNode().putNull("tab"), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers")).isEmpty();
+		owner.request("PUT", path, json.createObjectNode().put("tab", "outline").put("seq", "x"), 422);
+
+		// 소수 순번은 잘라 받지 않고 거절해 보던 탭을 바꾸지 않는다
+		owner.request("PUT", path, tab.deepCopy().put("seq", 5), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers").get(0).get("tab").asString())
+			.isEqualTo("materials");
+		owner.request("PUT", path, tab.deepCopy().put("tab", "design").put("seq", 5.5), 422);
+		owner.request("PUT", path, tab.deepCopy().putNull("tab").put("seq", -0.5), 422);
+		owner.request("PUT", path, tab.deepCopy().put("tab", "outline").put("seq", 6), 204);
+		assertThat(json.readTree(firstNamed(stream, "viewers.updated").get("data")).get("viewers").get(0).get("tab").asString())
+			.isEqualTo("outline");
+	}
+
+	@Test
 	void subscriptionEndsWhenEventLookupFailsSoClientCanReconnect() throws Exception {
 		Browser owner = signup("소유자");
 		String project = createProject(owner, "조회 실패");
