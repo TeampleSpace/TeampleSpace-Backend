@@ -45,6 +45,8 @@ public class EventStreams {
 
 	private final Viewers viewers;
 
+	private final Signals signals;
+
 	// ponytail: 연결마다 0.5초 간격으로 DB를 조회하고 스레드 하나로 보낸다
 	// 동시 연결이 늘면 커밋 알림으로 깨우고 보내는 스레드를 나눈다
 	private final ScheduledExecutorService poller = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -53,11 +55,13 @@ public class EventStreams {
 		return thread;
 	});
 
-	public EventStreams(ProjectEvents events, ProjectAccess access, Presence presence, Viewers viewers) {
+	public EventStreams(ProjectEvents events, ProjectAccess access, Presence presence, Viewers viewers,
+			Signals signals) {
 		this.events = events;
 		this.access = access;
 		this.presence = presence;
 		this.viewers = viewers;
+		this.signals = signals;
 	}
 
 	// 커서가 없으면 지금부터의 이벤트만 보낸다
@@ -90,6 +94,9 @@ public class EventStreams {
 
 		// 마지막으로 보낸 다른 팀원의 탭 목록. 바뀔 때만 다시 보낸다
 		private List<Viewers.Viewer> tabs = List.of();
+
+		// 마지막으로 보낸 바로 넘기는 신호 번호. 연결한 뒤의 신호만 보낸다
+		private long signal = signals.last();
 
 		// 응답 헤더는 첫 전송 때 나간다. 첫 조회에 이벤트가 없어도 주석 줄을 보내 연결을 바로 알린다
 		private int idlePolls = KEEP_ALIVE_POLLS - 1;
@@ -146,6 +153,10 @@ public class EventStreams {
 						.data(Map.of("projectId", projectId.toString(), "viewers", seen), MediaType.APPLICATION_JSON)
 						.build());
 				}
+				List<Signals.Signal> relayed = signals.after(signal, projectId);
+				for (Signals.Signal next : relayed) {
+					batch.addAll(SseEmitter.event().name(next.type()).data(next.data(), MediaType.APPLICATION_JSON).build());
+				}
 				if (batch.isEmpty() && ++idlePolls >= KEEP_ALIVE_POLLS) {
 					batch.addAll(SseEmitter.event().comment("keep-alive").build());
 				}
@@ -159,6 +170,9 @@ public class EventStreams {
 				}
 				if (switched) {
 					tabs = seen;
+				}
+				if (!relayed.isEmpty()) {
+					signal = relayed.get(relayed.size() - 1).id();
 				}
 				idlePolls = 0;
 			}
