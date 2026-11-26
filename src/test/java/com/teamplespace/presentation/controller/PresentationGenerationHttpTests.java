@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,6 +39,8 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 	private static final AtomicInteger remainingFailures = new AtomicInteger();
 	private static final AtomicInteger slideCount = new AtomicInteger(2);
 	private static final AtomicReference<JsonNode> providerRequest = new AtomicReference<>();
+	// 비어 있으면 항목 번호 없이 slideCount만큼 보낸다
+	private static final AtomicReference<List<Integer>> itemNumbers = new AtomicReference<>(List.of());
 	private static final HttpServer provider = startProvider();
 
 	@Autowired
@@ -61,6 +64,7 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		calls.set(0);
 		remainingFailures.set(0);
 		slideCount.set(2);
+		itemNumbers.set(List.of());
 		providerRequest.set(null);
 	}
 
@@ -159,6 +163,32 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 	}
 
 	@Test
+	void splitsOneOutlineItemIntoSeveralSlides() throws Exception {
+		Browser owner = signup("여러 장 생성 소유자");
+		String project = createProject(owner, "여러 장 생성");
+		String source = memo(owner, project, "긴 원문");
+		saveOutline(owner, project, 1, source);
+		saveTemplate(owner, project, 1, owner.get("/templates").get("items").get(0));
+		itemNumbers.set(List.of(1, 1, 1, 2));
+
+		JsonNode queued = owner.request("POST", "/projects/" + project + "/presentation-jobs", request(2, 2, source), 202,
+				UUID.randomUUID().toString());
+		jobs.run(claim(queued));
+		assertThat(owner.get(path(queued)).get("status").asString()).isEqualTo("succeeded");
+		assertThat(json.readTree(providerRequest.get().get("input").asString()).get("maxSlides").asInt())
+			.isEqualTo(PresentationGeneration.CONTENT_SLIDES_MAX);
+		JsonNode slides = owner.get("/projects/" + project + "/sync-snapshot?scope=editor").get("presentation")
+			.get("slides");
+		// 표지, 첫 항목 세 장, 둘째 항목 한 장, 정리
+		assertThat(slides).hasSize(6);
+		for (int index = 1; index <= 3; index++) {
+			assertThat(texts(slides.get(index))).contains("항목 " + index, "출처: 긴 원문");
+		}
+		assertThat(texts(slides.get(4))).contains("항목 4").doesNotContain("출처: 긴 원문");
+		assertThat(slides.get(5).get("layoutId").asString()).isEqualTo("summary");
+	}
+
+	@Test
 	void keepsNothingWhenTheResultIsInvalidOrInputsChange() throws Exception {
 		Browser owner = signup("생성 경합 소유자");
 		Browser member = signup("생성 경합 팀원");
@@ -176,6 +206,18 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 		assertFailure(owner, invalid, "JOB_PRESENTATION_INVALID_RESULT");
 		assertThat(presentations(project)).isZero();
 		slideCount.set(2);
+
+		// 항목 순서가 어긋나거나 빠진 항목, 상한을 넘는 응답은 받지 않는다
+		List<Integer> tooMany = new ArrayList<>(Collections.nCopies(PresentationGeneration.CONTENT_SLIDES_MAX, 1));
+		tooMany.add(2);
+		for (List<Integer> numbers : List.of(List.of(1, 2, 1), List.of(1, 1), List.of(2, 1), tooMany)) {
+			itemNumbers.set(numbers);
+			JsonNode rejected = owner.request("POST", url, request(2, 2, source), 202, UUID.randomUUID().toString());
+			jobs.run(claim(rejected));
+			assertFailure(owner, rejected, "JOB_PRESENTATION_INVALID_RESULT");
+		}
+		itemNumbers.set(List.of());
+		assertThat(presentations(project)).isZero();
 
 		JsonNode designChanged = member.request("POST", url, request(2, 2, source), 202, UUID.randomUUID().toString());
 		var claim = claim(designChanged);
@@ -323,8 +365,14 @@ class PresentationGenerationHttpTests extends HttpIntegrationSupport {
 			var deck = PROVIDER_JSON.createObjectNode().put("title", "생성한 발표 제목").put("subtitle", "생성한 소개 문장")
 				.put("style", "swiss");
 			var slides = deck.putArray("slides");
-			for (int index = 1; index <= slideCount.get(); index++) {
-				var slide = slides.addObject().put("layout", index % 2 == 1 ? "cards" : "compare")
+			List<Integer> numbered = itemNumbers.get();
+			int count = numbered.isEmpty() ? slideCount.get() : numbered.size();
+			for (int index = 1; index <= count; index++) {
+				var slide = slides.addObject();
+				if (!numbered.isEmpty()) {
+					slide.put("item", numbered.get(index - 1));
+				}
+				slide.put("layout", index % 2 == 1 ? "cards" : "compare")
 					.put("title", "항목 " + index).put("message", "핵심 문장").put("figure", "");
 				var points = slide.putArray("points");
 				points.addObject().put("head", "첫째 요점").put("body", "첫째 문장").put("figure", "312명");

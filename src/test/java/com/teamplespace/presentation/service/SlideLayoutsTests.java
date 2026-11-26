@@ -86,6 +86,30 @@ class SlideLayoutsTests {
 	}
 
 	@Test
+	void agendaAndNumbersFollowOutlineItems() {
+		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("blue-focus"));
+		List<Section> sections = new ArrayList<>();
+		for (String title : List.of("첫 항목", "첫 항목 이어서", "둘째 항목", "셋째 항목")) {
+			sections.add(new Section("list", title, "", "", List.of(point("요점", "설명"), point("다음", "설명"))));
+		}
+		Deck deck = new Deck("제목", "소개", "focus", sections, section("list", 2), List.of(1, 1, 2, 3));
+		List<String> sources = new ArrayList<>(List.of("출처: 첫 자료", "출처: 둘째 자료"));
+		sources.add(null);
+		List<Slide> slides = SlideLayouts.build(json, deck, theme, sources);
+		assertThat(slides).hasSize(7);
+		assertThat(texts(slides.get(1))).contains("첫 항목", "둘째 항목", "셋째 항목").doesNotContain("첫 항목 이어서");
+		assertThat(texts(slides.get(2))).contains("SECTION 01", "출처: 첫 자료");
+		assertThat(texts(slides.get(3))).contains("SECTION 01", "출처: 첫 자료");
+		assertThat(texts(slides.get(4))).contains("SECTION 02", "출처: 둘째 자료");
+		assertThat(texts(slides.get(5))).contains("SECTION 03").doesNotContain("출처: 둘째 자료");
+	}
+
+	private static List<String> texts(Slide slide) {
+		return slide.elements().stream().filter(element -> element.type().equals("text"))
+			.map(element -> element.content().get("text").asString()).toList();
+	}
+
+	@Test
 	void customStyleFollowsPrimaryColor() {
 		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.custom("corporate", "#7A1F2B"));
 		assertThat(theme.style()).isEqualTo("corporate");
