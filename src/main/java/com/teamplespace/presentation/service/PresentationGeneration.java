@@ -459,7 +459,7 @@ public class PresentationGeneration implements JobHandler {
 		return value;
 	}
 
-	// 이모지와 장식 기호, 앞에 붙은 글머리표를 지우고 공백을 한 칸으로 줄인다. 도와 단위 기호는 남긴다
+	// 이모지와 장식 기호, 앞에 붙은 글머리표를 지우고 공백을 한 칸으로 줄인다. 도와 섭씨, 화씨 같은 문자형 단위와 넓이 단위는 남긴다
 	static String clean(String text) {
 		StringBuilder kept = new StringBuilder();
 		text.codePoints().filter(cp -> !decoration(cp)).forEach(kept::appendCodePoint);
@@ -467,7 +467,7 @@ public class PresentationGeneration implements JobHandler {
 	}
 
 	private static boolean decoration(int cp) {
-		boolean unit = cp == 0xB0 || cp == 0x2103 || cp >= 0x3380 && cp <= 0x33FF;
+		boolean unit = cp == 0xB0 || cp >= 0x2100 && cp <= 0x214F || cp >= 0x3380 && cp <= 0x33FF;
 		return Character.getType(cp) == Character.OTHER_SYMBOL && !unit || cp >= 0x2190 && cp <= 0x21FF
 				|| cp >= 0x1F3FB && cp <= 0x1F3FF || cp == 0x200D || cp == 0x20E3 || cp == 0xFE0F || cp == 0xFE0E
 				|| cp == 0x2022;
