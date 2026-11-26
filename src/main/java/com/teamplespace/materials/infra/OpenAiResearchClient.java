@@ -197,7 +197,7 @@ public class OpenAiResearchClient {
 				.filter(pair -> !pair.startsWith("utm_")).toList());
 			int port = uri.getPort();
 			boolean defaultPort = port == -1 || port == ("https".equals(scheme) ? 443 : 80);
-			return uri.getHost().toLowerCase(Locale.ROOT) + (defaultPort ? "" : ":" + port) + path
+			return scheme + "://" + uri.getHost().toLowerCase(Locale.ROOT) + (defaultPort ? "" : ":" + port) + path
 					+ (query.isEmpty() ? "" : "?" + query);
 		}
 		catch (URISyntaxException ex) {
