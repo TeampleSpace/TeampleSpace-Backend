@@ -2794,8 +2794,6 @@ final class SlideLayouts {
 			if (y + 24 + sub.height(1.6) < 540) {
 				put(64, y + 24, 900, subtitle, sub, 400, t.onAccentSoft(), "left", 1.6, false);
 			}
-			tx(64, 596, 400, "구성", 14, 14, 1, 700, t.muted(), "left", 1.4);
-			tx(64, 620, 600, "본문 " + deck.topics().size() + "개 주제와 정리", 18, 18, 1, 700, t.ink(), "left", 1.4);
 			rect(1040, 600, 176, 64, t.accent());
 			tx(1040, 620, 176, "REPORT", 18, 18, 1, 800, goldOn(t.accent()), "center", 1.3);
 		}

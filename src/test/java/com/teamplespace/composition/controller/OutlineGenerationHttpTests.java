@@ -192,6 +192,48 @@ class OutlineGenerationHttpTests extends HttpIntegrationSupport {
 		assertThat(owner.get(outline)).isEqualTo(manual);
 	}
 
+	@Test
+	void extendKeepsEditedItemsAndAddsNewMaterial() throws Exception {
+		Browser owner = signup("구성 보완 소유자");
+		String project = createProject(owner, "구성 보완");
+		String url = "/projects/" + project + "/outline-jobs";
+		String outline = "/projects/" + project + "/outline";
+		String old = memo(owner, project, "기존 원문").get("id").asString();
+		String added = memo(owner, project, "새 원문").get("id").asString();
+		owner.post(url, Map.of("expectedVersion", 1, "sourceIds", List.of(added), "mode", "extend"), 422);
+
+		JsonNode edited = owner.request("PUT", outline, Map.of("expectedVersion", 1, "items", List.of(
+				Map.of("title", "직접 고친 항목", "summary", "직접 쓴 설명", "sourceIds", List.of(old)),
+				Map.of("title", "근거 없는 항목", "sourceIds", List.of()))), 200, UUID.randomUUID().toString());
+		var input = Map.of("expectedVersion", 2, "sourceIds", List.of(added), "mode", "extend");
+		assertThat(ContractSchemas.validate("stage-3-generation.schema.json#/$defs/OutlineJobRequest",
+				json.writeValueAsString(input))).isEmpty();
+		owner.post(url, Map.of("expectedVersion", 2, "sourceIds", List.of(added), "mode", "merge"), 422);
+		JsonNode queued = owner.post(url, input, 202);
+		jobs.run(claim(queued));
+
+		JsonNode sent = providerRequest.get();
+		assertThat(sent.get("text").get("format").get("name").asString()).isEqualTo("presentation_outline_extension");
+		JsonNode existing = json.readTree(sent.get("input").asString()).get("existingItems");
+		assertThat(existing.get(0).get("title").asString()).isEqualTo("직접 고친 항목");
+		assertThat(existing.get(0).get("sourceNumbers")).isEmpty();
+		assertThat(owner.get(path(queued)).get("status").asString()).isEqualTo("succeeded");
+
+		JsonNode items = owner.get(outline).get("items");
+		JsonNode first = edited.get("items").get(0);
+		assertThat(items.size()).isEqualTo(3);
+		assertThat(items.get(0).get("title").asString()).isEqualTo("생성한 새 항목");
+		assertThat(items.get(0).get("sourceRefs").get(0).get("materialId").asString()).isEqualTo(added);
+		assertThat(items.get(1).get("id")).isEqualTo(first.get("id"));
+		assertThat(items.get(1).get("title").asString()).isEqualTo("직접 고친 항목");
+		assertThat(items.get(1).get("summary").asString()).isEqualTo("직접 쓴 설명");
+		assertThat(items.get(1).get("sourceRefs").get(0)).isEqualTo(first.get("sourceRefs").get(0));
+		assertThat(items.get(1).get("sourceRefs").get(1).get("materialId").asString()).isEqualTo(added);
+		assertThat(items.get(2).get("id")).isEqualTo(edited.get("items").get(1).get("id"));
+		assertThat(items.get(2).get("title").asString()).isEqualTo("근거 없는 항목");
+		assertThat(items.get(2).get("sourceRefs")).isEmpty();
+	}
+
 	private void assertFailure(Browser actor, JsonNode job, String code) throws Exception {
 		JsonNode failed = actor.get(path(job));
 		assertThat(failed.get("status").asString()).isEqualTo("failed");
@@ -234,8 +276,18 @@ class OutlineGenerationHttpTests extends HttpIntegrationSupport {
 				return;
 			}
 			var output = PROVIDER_JSON.createObjectNode();
-			output.putArray("items").addObject().put("title", "생성한 제목").put("summary", "생성한 발표 내용")
-				.putArray("sourceNumbers").add(sourceNumber.get());
+			JsonNode request = providerRequest.get();
+			if (request.get("text").get("format").get("name").asString().equals("presentation_outline_extension")) {
+				// 새 항목을 맨 앞에 두고 첫 기존 항목에 근거를 붙인다. 두 번째 기존 항목은 일부러 빼서 남는지 본다
+				var items = output.putArray("items");
+				items.addObject().put("existing", 0).put("title", "생성한 새 항목").put("summary", "새 자료 내용")
+					.putArray("sourceNumbers").add(1);
+				items.addObject().put("existing", 1).put("title", "").put("summary", "").putArray("sourceNumbers").add(1);
+			}
+			else {
+				output.putArray("items").addObject().put("title", "생성한 제목").put("summary", "생성한 발표 내용")
+					.putArray("sourceNumbers").add(sourceNumber.get());
+			}
 			var response = PROVIDER_JSON.createObjectNode().put("status", "completed");
 			response.putArray("output").addObject().put("type", "message").putArray("content")
 				.addObject().put("type", "output_text").put("text", PROVIDER_JSON.writeValueAsString(output));
