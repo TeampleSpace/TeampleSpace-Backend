@@ -157,8 +157,9 @@ public class MaterialSummary implements JobHandler {
 		return row;
 	}
 
+	// 링크 자료는 본문을 못 읽는 경우가 많아 분석 정리 대상에서 뺀다
 	private static boolean isCurrent(MaterialService.Row row, UUID revisionId) {
-		return row.state().equals("ready") && Objects.equals(row.currentRevisionId(), revisionId);
+		return !row.kind().equals("link") && row.state().equals("ready") && Objects.equals(row.currentRevisionId(), revisionId);
 	}
 
 	private Source source(MaterialService.Row row) {
