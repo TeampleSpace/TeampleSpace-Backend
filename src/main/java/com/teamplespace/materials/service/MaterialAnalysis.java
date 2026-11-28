@@ -90,6 +90,10 @@ public class MaterialAnalysis implements JobHandler {
 		}
 		if (source.get("kind").equals("link")) {
 			LinkFetcher.Page page = links.fetch((String) source.get("source_url"));
+			// 로그인 화면이나 빈 껍데기는 준비 완료로 두지 않아 발표 구성의 근거 후보에서 빠진다
+			if (!readable(page.text())) {
+				throw noContent();
+			}
 			List<Chunk> chunks = new ArrayList<>();
 			String text = page.text().substring(0, Math.min(page.text().length(), MAX_TEXT_CHARS));
 			for (int start = 0; start < text.length(); start += CHUNK_CHARS) {
@@ -262,6 +266,27 @@ public class MaterialAnalysis implements JobHandler {
 		boolean web = (lower.startsWith("http://") || lower.startsWith("https://")) && url.length() > lower.indexOf("//") + 2;
 		boolean mail = lower.startsWith("mailto:") && url.length() > 7;
 		return (web || mail) && url.chars().noneMatch(c -> c < ' ' || c == 127 || Character.isWhitespace(c)) ? url : null;
+	}
+
+	private static final int MIN_READABLE_CHARS = 100;
+
+	private static final int LOGIN_WALL_CHARS = 500;
+
+	private static final java.util.regex.Pattern ADDRESSES = java.util.regex.Pattern.compile("(https?://|mailto:)\\S+");
+
+	private static final java.util.regex.Pattern LOGIN = java.util.regex.Pattern
+		.compile("\\b(log ?in|sign ?(in|up))\\b|로그인|회원가입", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+	// 주소를 뺀 글자가 100자 미만이거나, 500자 미만인데 로그인 안내가 있으면 읽지 못한 링크로 본다
+	// ponytail: 글자 수와 문구만 보는 어림이다. 짧은 정상 글은 막고 화면 틀 글자만 많은 페이지는 통과한다
+	static boolean readable(String text) {
+		String plain = ADDRESSES.matcher(text).replaceAll("");
+		int letters = plain.replaceAll("\\s+", "").length();
+		return letters >= MIN_READABLE_CHARS && (letters >= LOGIN_WALL_CHARS || !LOGIN.matcher(plain).find());
+	}
+
+	public static JobFailure noContent() {
+		return new JobFailure("LINK_NO_CONTENT", "읽을 수 있는 본문이 없어요.", false);
 	}
 
 	private static JobFailure unreadable() {

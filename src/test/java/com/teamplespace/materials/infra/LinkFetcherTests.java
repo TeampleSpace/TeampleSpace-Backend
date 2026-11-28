@@ -322,7 +322,10 @@ class LinkFetcherTests {
 		assertThat(failure(local, base + "/large").code()).isEqualTo("LINK_TOO_LARGE");
 		assertThat(failure(local, base + "/bomb").code()).isEqualTo("LINK_TOO_LARGE");
 		assertThat(failure(local, base + "/image").code()).isEqualTo("LINK_UNSUPPORTED_CONTENT");
-		assertThat(failure(local, base + "/empty").code()).isEqualTo("LINK_UNSUPPORTED_CONTENT");
+		// 스크립트로만 그리는 빈 페이지는 형식 오류가 아니라 읽을 본문이 없는 것이다
+		JobFailure empty = failure(local, base + "/empty");
+		assertThat(empty.code()).isEqualTo("LINK_NO_CONTENT");
+		assertThat(empty.retryable()).isFalse();
 		JobFailure slow = failure(local, base + "/slow");
 		assertThat(slow.code()).isEqualTo("LINK_FETCH_FAILED");
 		assertThat(slow.retryable()).isTrue();

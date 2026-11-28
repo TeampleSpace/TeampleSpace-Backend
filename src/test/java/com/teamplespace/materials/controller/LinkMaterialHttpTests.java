@@ -25,6 +25,9 @@ class LinkMaterialHttpTests extends HttpIntegrationSupport {
 
 	private static final String S = "stage-2.schema.json#/$defs/";
 
+	// 읽은 본문으로 인정받을 만큼의 문단
+	private static final String DETAIL = "학생회와 교내 카페가 반납 수거 시간을 정하고 세척 업체와 계약해 컵을 다시 쓰는 비율을 높였다. ".repeat(3);
+
 	@Autowired
 	JobQueue queue;
 
@@ -65,7 +68,7 @@ class LinkMaterialHttpTests extends HttpIntegrationSupport {
 			.isEqualTo(1);
 
 		when(fetcher.fetch("https://example.com/reuse-cup")).thenReturn(new LinkFetcher.Page(
-				"https://example.com/reuse-cup", "대학의 일회용품 감축 사례", "여러 대학이 다회용컵 반납함을 늘렸다.\n\n반납 동선을 줄이자 이용이 늘었다."));
+				"https://example.com/reuse-cup", "대학의 일회용품 감축 사례", "여러 대학이 다회용컵 반납함을 늘렸다.\n\n반납 동선을 줄이자 이용이 늘었다.\n\n" + DETAIL));
 		runJobs();
 
 		JsonNode ready = owner.get("/materials/" + id);
@@ -110,7 +113,7 @@ class LinkMaterialHttpTests extends HttpIntegrationSupport {
 
 		org.mockito.Mockito.reset(fetcher);
 		when(fetcher.fetch("https://example.org/slow"))
-			.thenReturn(new LinkFetcher.Page("https://example.org/slow", "문서 제목", "다시 가져온 본문"));
+			.thenReturn(new LinkFetcher.Page("https://example.org/slow", "문서 제목", "다시 가져온 본문\n\n" + DETAIL));
 		String key = UUID.randomUUID().toString();
 		JsonNode retried = owner.request("POST", "/materials/" + id + "/reprocess", null, 201, key);
 		assertThat(owner.request("POST", "/materials/" + id + "/reprocess", null, 201, key)).isEqualTo(retried);
@@ -149,6 +152,29 @@ class LinkMaterialHttpTests extends HttpIntegrationSupport {
 		assertThat(job.get("error").get("code").asString()).isEqualTo("LINK_BLOCKED");
 		assertThat(job.get("attempt").asInt()).isEqualTo(1);
 		assertThat(job.get("error").get("retryable").asBoolean()).isFalse();
+	}
+
+	@Test
+	void loginWallIsFailedWithoutRetryAndNotOfferedAsReady() throws Exception {
+		Browser owner = signup("링크 로그인 화면 소유자");
+		String projectId = createProject(owner, "링크 로그인 화면 " + UUID.randomUUID());
+		when(fetcher.fetch(anyString())).thenReturn(new LinkFetcher.Page("https://www.instagram.com/natgeo/",
+				"National Geographic", "Log In (https://www.instagram.com/accounts/login/)\n\nSign Up\n\nShow more posts from natgeo"));
+		String id = owner.post("/projects/" + projectId + "/materials/link",
+				Map.of("url", "https://www.instagram.com/natgeo/", "description", "사진 참고"), 201).get("material").get("id").asString();
+		runJobs();
+
+		JsonNode failed = owner.get("/materials/" + id);
+		assertMatches(S + "Material", failed);
+		assertThat(failed.get("status").asString()).isEqualTo("failed");
+		assertThat(failed.get("currentRevision").isNull()).isTrue();
+		assertThat(failed.get("job").get("error").get("code").asString()).isEqualTo("LINK_NO_CONTENT");
+		assertThat(failed.get("job").get("error").get("retryable").asBoolean()).isFalse();
+		assertThat(failed.get("job").get("attempt").asInt()).isEqualTo(1);
+		// 수집 제목으로 바꾸지 않고 주소와 설명은 남긴다
+		assertThat(failed.get("title").asString()).isEqualTo("www.instagram.com");
+		assertThat(failed.get("source").get("url").asString()).isEqualTo("https://www.instagram.com/natgeo/");
+		assertThat(owner.get("/projects/" + projectId + "/materials?status=ready").get("items").isEmpty()).isTrue();
 	}
 
 }
