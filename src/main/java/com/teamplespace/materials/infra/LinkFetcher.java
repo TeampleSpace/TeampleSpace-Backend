@@ -248,7 +248,7 @@ public class LinkFetcher {
 		}
 		text = MaterialAnalysis.clean(text).replaceAll("\\n[ \\t]+", "\n").replaceAll("\\n{3,}", "\n\n");
 		if (text.isBlank()) {
-			throw new JobFailure("LINK_UNSUPPORTED_CONTENT", "글로 읽을 수 없는 문서예요.", false);
+			throw MaterialAnalysis.noContent();
 		}
 		return new Page(uri.toString(), title, text);
 	}
