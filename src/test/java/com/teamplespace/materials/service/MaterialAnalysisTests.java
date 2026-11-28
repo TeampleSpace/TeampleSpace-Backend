@@ -30,6 +30,8 @@ class MaterialAnalysisTests {
 		assertThat(MaterialAnalysis.readable("Log inSign up\n" + paragraph.repeat(20))).isTrue();
 		// 단어 안에 든 글자는 로그인 안내로 보지 않는다
 		assertThat(MaterialAnalysis.readable("Our catalog includes signal processing notes. ".repeat(4))).isTrue();
+		assertThat(MaterialAnalysis.readable("Signing documents digitally saves paper and keeps a clear record. ".repeat(3))).isTrue();
+		assertThat(MaterialAnalysis.readable("Logins are audited weekly and every change is reviewed by two people. ".repeat(3))).isTrue();
 	}
 
 	@Test
