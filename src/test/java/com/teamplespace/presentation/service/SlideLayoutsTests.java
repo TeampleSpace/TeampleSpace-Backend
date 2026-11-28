@@ -51,7 +51,7 @@ class SlideLayoutsTests {
 		List<String> problems = new ArrayList<>();
 		for (var theme : themes().entrySet()) {
 			for (var deck : Map.of("sample", sample(), "longest", longest(), "few", few(), "unspaced", unspaced(90),
-					"unspaced-mid", unspaced(50)).entrySet()) {
+					"unspaced-mid", unspaced(50), "chart", sample(true), "charts", charts()).entrySet()) {
 				List<Slide> slides = SlideLayouts.build(json, deck.getValue(), theme.getValue(), sources(deck.getValue()));
 				for (int index = 0; index < slides.size(); index++) {
 					String name = theme.getKey() + " " + deck.getKey() + " " + index + " " + slides.get(index).layout();
@@ -73,6 +73,79 @@ class SlideLayoutsTests {
 			assertThat(layouts).as(theme.getKey())
 				.containsExactly("title", "agenda", "statement", "cards", "compare", "process", "list", "summary");
 		}
+	}
+
+	// 그래프 장은 스튜디오 템플릿만 그리고 다른 계열은 카드로 바꾼다
+	@Test
+	void onlyStudioTemplatesDrawCharts() {
+		for (var theme : themes().entrySet()) {
+			List<String> layouts = SlideLayouts.build(json, sample(true), theme.getValue(), sources(sample(true)))
+				.stream().map(Slide::layout).toList();
+			boolean studio = SlideLayouts.CHART_STYLES.contains(theme.getValue().style());
+			assertThat(layouts.get(5)).as(theme.getKey()).isEqualTo(studio ? "chart" : "cards");
+		}
+		Theme campus = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("open-campus"));
+		Deck counts = new Deck("제목", "소개", "focus", List.of(new Section("chart", "응답", "해석", "", List.of(
+				new Point("가", "설명", "312명"), new Point("나", "설명", "120명")))), section("list", 2));
+		assertThat(SlideLayouts.build(json, counts, campus, sources(counts)).get(1).layout()).isEqualTo("cards");
+	}
+
+	@Test
+	void seriesNeedsNumbersWithTheSameUnit() {
+		assertThat(SlideLayouts.series(figures("64%", "46%", "18%")).values()).containsExactly(64, 46, 18);
+		assertThat(SlideLayouts.series(figures("1,200원", "350.5원")).values()).containsExactly(1200, 350.5);
+		assertThat(SlideLayouts.series(figures("75", "62")).unit()).isEmpty();
+		assertThat(SlideLayouts.series(figures("64%", "46명"))).isNull();
+		assertThat(SlideLayouts.series(figures("3곳", "2개 그룹"))).isNull();
+		assertThat(SlideLayouts.series(figures("4~5월", "6월"))).isNull();
+		assertThat(SlideLayouts.series(figures("64%", ""))).isNull();
+		assertThat(SlideLayouts.series(figures("64%"))).isNull();
+		assertThat(SlideLayouts.series(figures("0%", "0%"))).isNull();
+		assertThat(SlideLayouts.series(figures("1%", "2%", "3%", "4%", "5%", "6%"))).isNull();
+	}
+
+	// 막대 길이는 가장 큰 수치에 비례한다
+	@Test
+	void barsFollowValues() {
+		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("burgundy-editorial"));
+		Slide chart = SlideLayouts.build(json, sample(true), theme, sources(sample(true))).get(5);
+		List<Integer> bars = chart.elements().stream()
+			.filter(e -> e.type().equals("shape") && e.x() == 244).map(Element::width).toList();
+		assertThat(bars).containsExactly(384, 276, 192, 108);
+		assertThat(texts(chart).stream().map(text -> text.replace("\n", " ")))
+			.contains("64%", "46%", "반납 장소  64%", "반납 동선을 먼저 줄여야 합니다");
+	}
+
+	private static Section figures(String... values) {
+		List<Point> points = new ArrayList<>();
+		for (String value : values) {
+			points.add(new Point("항목", "설명", value));
+		}
+		return new Section("chart", "제목", "", "", points);
+	}
+
+	// 그래프로 그릴 수 있는 수치와 가장 긴 글, 단위가 섞여 카드로 바꾸는 경우
+	private static Deck charts() {
+		String head = "가".repeat(SlideLayouts.HEAD_MAX);
+		String body = ("본문 설명이 길어서 여러 줄로 ").repeat(7).substring(0, SlideLayouts.POINT_MAX).strip();
+		String message = ("핵심 주장을 담은 아주 긴 문장 ").repeat(5).substring(0, SlideLayouts.MESSAGE_MAX).strip();
+		String title = "가".repeat(SlideLayouts.SLIDE_TITLE_MAX - 8) + " 나다라마바사";
+		List<Section> sections = new ArrayList<>();
+		sections.add(new Section("chart", "두 항목", "", "", List.of(new Point("찬성", "설명", "72%"),
+				new Point("반대", "설명", "28%"))));
+		List<Point> five = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			five.add(new Point(head, body, "123,456명"));
+		}
+		sections.add(new Section("chart", title, message, "1,234,567명", five));
+		List<Point> percents = new ArrayList<>();
+		for (int i = 0; i < 3; i++) {
+			percents.add(new Point(head, body, (100 - i * 40) + "%"));
+		}
+		sections.add(new Section("chart", title, message, "", percents));
+		sections.add(new Section("chart", "섞인 단위", "해석", "", List.of(new Point("가", "설명", "3곳"),
+				new Point("나", "설명", "12명"))));
+		return new Deck("그래프 발표", "수치 비교", "focus", sections, section("list", 3));
 	}
 
 	@Test
