@@ -216,6 +216,30 @@ class MaterialSummaryHttpTests extends HttpIntegrationSupport {
 		owner.post(path + "/summary-jobs", input, 409);
 	}
 
+	@Test
+	void linkMaterialsAreNotSentToTheProvider() throws Exception {
+		Browser owner = signup("링크 분석 거절");
+		String project = createProject(owner, "링크 분석 거절");
+		JsonNode material = memo(owner, project, "링크로 바꿀 자료", "링크에서 가져온 본문");
+		String path = materialPath(material);
+		var input = Map.of("expectedRevisionId", revision(material));
+		JsonNode queued = owner.post(path + "/summary-jobs", input, 202);
+		// 수집이 끝난 링크 자료와 같은 모양으로 바꾼다
+		jdbc.sql("UPDATE materials SET kind = 'link', source_url = 'https://example.com/' WHERE id = UUID_TO_BIN(?)")
+			.param(material.path("id").asString()).update();
+
+		// 이미 대기 중이던 작업도 제공자를 부르지 않고 끝난다
+		jobs.run(claim(queued));
+		assertThat(owner.get(jobPath(queued)).path("status").asString()).isEqualTo("failed");
+		assertThat(owner.get(jobPath(queued)).path("error").path("code").asString()).isEqualTo("JOB_INPUT_STALE");
+		JsonNode rejected = owner.post(path + "/summary-jobs", input, 409);
+		assertThat(rejected.path("error").path("code").asString()).isEqualTo("MATERIAL_STATE_CONFLICT");
+		assertThat(calls.get()).isZero();
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM jobs WHERE type = ? AND project_id = UUID_TO_BIN(?)")
+			.params("material_summary", project).query(Integer.class).single()).isEqualTo(1);
+		assertThat(owner.get(path).path("currentRevision").path("analysis").isNull()).isTrue();
+	}
+
 	private JsonNode memo(Browser browser, String project, String title, String markdown) throws Exception {
 		return browser.post("/projects/" + project + "/materials/memo", Map.of("title", title, "markdown", markdown), 201)
 			.path("material");
