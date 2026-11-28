@@ -121,6 +121,23 @@ class SlideLayoutsTests {
 		assertThat(texts(agenda)).contains("Contents");
 	}
 
+	// Slide Layouts 계열 이름의 템플릿은 그 계열 배치와 피그마 색으로 그린다
+	@Test
+	void slideLayoutTemplatesUseFigmaFamilies() {
+		assertThat(SlideLayouts.TEMPLATES.get("pop-pitch").style()).isEqualTo("pop");
+		assertThat(SlideLayouts.TEMPLATES.get("green-natural").style()).isEqualTo("natural");
+		assertThat(SlideLayouts.TEMPLATES.get("swiss-grid").style()).isEqualTo("swiss");
+		assertThat(SlideLayouts.TEMPLATES.get("bento-pastel").style()).isEqualTo("bento");
+		assertThat(SlideLayouts.TEMPLATES.get("corporate").style()).isEqualTo("corporate");
+		Theme swiss = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("swiss-grid"));
+		assertThat(swiss.accent()).isEqualTo("#DF3121");
+		assertThat(swiss.ink()).isEqualTo("#0A0A0A");
+		Theme corporate = Theme.of("Pretendard", "Pretendard", SlideLayouts.TEMPLATES.get("corporate"));
+		Slide cover = SlideLayouts.build(json, sample(), corporate, sources(sample())).get(0);
+		assertThat(cover.elements().get(0).style().get("fill").asString()).isEqualTo("#0F2A4A");
+		assertThat(cover.elements().stream().map(element -> element.style().path("fill").asString(""))).contains("#C9A227");
+	}
+
 	@Test
 	void customStyleFollowsPrimaryColor() {
 		Theme theme = Theme.of("Pretendard", "Pretendard", SlideLayouts.custom("corporate", "#7A1F2B"));

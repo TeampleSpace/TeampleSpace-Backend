@@ -83,7 +83,14 @@ final class SlideLayouts {
 			Map.entry("burgundy-editorial", new Look("burgundy", "#F3F0E8", "#1C1C1A", "#682A35", "#682A35")),
 			Map.entry("tech-pitch", new Look("signal", "#121819", "#FFFFFF", "#D5F45B", "#7FD3FF")),
 			Map.entry("open-campus", new Look("campus", "#F8F5EF", "#142E68", "#285BDD", "#FF6B4A")),
-			Map.entry("field-notes", new Look("fieldnotes", "#F2F4E9", "#254E40", "#254E40", "#E8D57D")));
+			Map.entry("field-notes", new Look("fieldnotes", "#F2F4E9", "#254E40", "#254E40", "#E8D57D")),
+			// 피그마 Slide Layouts의 계열 이름과 색을 그대로 쓰는 템플릿
+			Map.entry("pop-pitch", new Look("pop", "#FFF7E8", "#1D1B19", "#FF7A2F", "#FFD23F")),
+			Map.entry("green-natural", new Look("natural", "#F3EEE4", "#1F2A24", "#2F5D46", "#C9734A")),
+			// 피그마 빨강 #E63322는 흰 작은 글자 대비가 4.32라 4.5를 넘게 조금 어둡게 쓴다
+			Map.entry("swiss-grid", new Look("swiss", "#FFFFFF", "#0A0A0A", "#DF3121", "#DF3121")),
+			Map.entry("bento-pastel", new Look("bento", "#F4F1FA", "#221B33", "#7B5CD6", "#C4EEDF")),
+			Map.entry("corporate", new Look("corporate", "#FFFFFF", "#1A2433", "#0F2A4A", "#C9A227")));
 
 	// 템플릿 없이 만들 때 계열마다 대표색을 강조색으로 쓴다
 	static Look custom(String style, String primary) {
