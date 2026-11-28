@@ -8,6 +8,7 @@
 ## 2026-11-28 본문을 읽지 못한 링크 구분
 
 - 작업의 `error.code`로만 전달하는 `LINK_NO_CONTENT`를 추가했다. 링크 문서가 로그인 화면이거나 본문이 거의 비어 있으면 링크 수집 작업이 이 코드로 끝나고 자료는 failed가 된다. 내부 재시도는 하지 않고 발표 구성의 근거에서 빠진다
+- 본문이 완전히 빈 HTML도 이전의 `LINK_UNSUPPORTED_CONTENT` 대신 `LINK_NO_CONTENT`로 끝난다. `LINK_UNSUPPORTED_CONTENT`는 글이 아닌 형식에만 쓴다
 - 판별 기준과 한계는 `stage-2.md`의 링크와 마크다운 자료 절에 있다
 
 ## 2026-11-28 스튜디오 템플릿 그래프 장 추가
