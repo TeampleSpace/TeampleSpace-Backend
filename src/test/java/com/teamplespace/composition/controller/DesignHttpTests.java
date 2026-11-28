@@ -107,7 +107,8 @@ class DesignHttpTests extends HttpIntegrationSupport {
 		assertThat(keys).containsExactly("clean-report", "blue-focus", "editorial", "pitch-dark", "warm-story",
 				"grid-analysis", "bold-cover", "orange-pitch", "green-insight", "mono-editorial",
 				"lilac-studio", "data-briefing", "warm-seminar", "team-story",
-				"burgundy-editorial", "tech-pitch", "open-campus", "field-notes");
+				"burgundy-editorial", "tech-pitch", "open-campus", "field-notes",
+				"pop-pitch", "green-natural", "swiss-grid", "bento-pastel", "corporate");
 		assertThat(templates.get(0).get("name").asString()).isEqualTo("클린 리포트");
 		assertThat(catalog.get("allowedFonts").get(0).asString()).isEqualTo("Pretendard");
 
