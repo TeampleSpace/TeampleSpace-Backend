@@ -61,6 +61,7 @@
 
 - `featureFlags.materialSummary`가 true일 때 활성 팀원이 직접 요청할 수 있다. 기본값은 비활성이며 이때 새 요청은 `SERVICE_UNAVAILABLE`이다
 - `Idempotency-Key`와 `expectedRevisionId`가 필요하다. 같은 키와 본문을 재전송하면 먼저 등록한 작업을 돌려준다. 같은 개정의 새 요청이 이미 처리 중이면 `REQUEST_IN_PROGRESS`다
+- 링크 자료는 분석 정리를 요청할 수 없고 `MATERIAL_STATE_CONFLICT`다. 링크는 본문을 읽지 못하는 경우가 많아 PDF와 메모 자료만 받는다. 이미 대기 중이던 링크 자료의 작업은 제공자를 부르지 않고 `JOB_INPUT_STALE`로 끝난다. 기존 링크 자료에 남은 분석 결과는 지우지 않는다
 - 원문 개정이 바뀌었거나 자료가 준비되지 않았거나 현재 개정에 분석 정리가 있으면 `MATERIAL_STATE_CONFLICT`다. 이전 요약 문장만 있고 `analysis`가 null인 개정은 다시 요청할 수 있다. 추출한 본문이 비어 있으면 `VALIDATION_FAILED`다
 - `type`과 `targetType`은 `material_summary`, `targetId`는 현재 원문 개정 식별자다. 자료 상세의 `summaryJob`에서 현재 개정의 최신 분석 작업을 확인한다. 경로와 작업 유형 이름은 기존 요약 이름을 유지한다. 작업 상세와 취소에는 기존 작업 API를 사용한다
 - 제공자에게 요청한 자료의 제목과 정리한 본문 최대 20000자를 보내고 저장 옵션을 끈다. 원문 분석 작업과 원문 보기는 이 제공자를 호출하지 않는다
