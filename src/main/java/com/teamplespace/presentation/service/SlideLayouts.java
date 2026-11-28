@@ -3,7 +3,10 @@ package com.teamplespace.presentation.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import tools.jackson.databind.ObjectMapper;
@@ -57,7 +60,9 @@ final class SlideLayouts {
 	static final int FIGURE_MAX = 12;
 	static final int POINTS_MAX = 5;
 
-	static final List<String> LAYOUTS = List.of("cards", "list", "process", "compare", "statement");
+	static final List<String> LAYOUTS = List.of("cards", "list", "process", "compare", "statement", "chart");
+	// 그래프 장을 그리는 스튜디오 계열
+	static final Set<String> CHART_STYLES = Set.of("burgundy", "signal", "campus", "fieldnotes");
 	static final List<String> STYLES = List.of("focus", "editorial", "pop", "data", "natural", "swiss", "bento",
 			"corporate");
 
@@ -242,6 +247,7 @@ final class SlideLayouts {
 			case "process" -> count >= 3 && count <= 5;
 			case "compare" -> count == 2;
 			case "statement" -> count <= 3 && !section.message().isEmpty();
+			case "chart" -> series(section) != null;
 			default -> true;
 		};
 		String first = section.layout();
@@ -253,7 +259,7 @@ final class SlideLayouts {
 		}
 		List<String> order = new ArrayList<>(List.of(first));
 		order.addAll(switch (first) {
-			case "compare", "statement", "process" -> List.of("cards", "list");
+			case "compare", "statement", "process", "chart" -> List.of("cards", "list");
 			default -> List.of("list");
 		});
 		List<String> result = new ArrayList<>(order.stream().distinct().filter(usable).toList());
@@ -262,6 +268,52 @@ final class SlideLayouts {
 			result.add(1, result.remove(0));
 		}
 		return result;
+	}
+
+	// 그래프로 그릴 수치. 항목마다 같은 단위의 0 이상 숫자가 있어야 한다
+	record Series(double[] values, String unit) {
+
+		double max() {
+			double max = 0;
+			for (double value : values) {
+				max = Math.max(max, value);
+			}
+			return max;
+		}
+
+		// 가장 큰 항목의 순서
+		int lead() {
+			int best = 0;
+			for (int i = 1; i < values.length; i++) {
+				if (values[i] > values[best]) {
+					best = i;
+				}
+			}
+			return best;
+		}
+	}
+
+	// 64%, 312명, 1,200원, 4.5점처럼 숫자 뒤에 짧은 단위가 붙은 수치
+	private static final Pattern VALUE = Pattern.compile("(\\d{1,3}(?:,\\d{3})+|\\d+)(\\.\\d+)?\\s?([^\\d\\s.,]{0,4})");
+
+	// 항목이 2개에서 5개이고 모두 같은 단위의 수치이면 그 값을, 아니면 null
+	static Series series(Section section) {
+		List<Point> points = section.points();
+		if (points.size() < 2 || points.size() > 5) {
+			return null;
+		}
+		double[] values = new double[points.size()];
+		String unit = null;
+		for (int i = 0; i < points.size(); i++) {
+			Matcher m = VALUE.matcher(points.get(i).figure().strip());
+			if (!m.matches() || unit != null && !unit.equals(m.group(3))) {
+				return null;
+			}
+			unit = m.group(3);
+			values[i] = Double.parseDouble(m.group(1).replace(",", "") + (m.group(2) == null ? "" : m.group(2)));
+		}
+		Series series = new Series(values, unit);
+		return series.max() > 0 ? series : null;
 	}
 
 	// 디자인 계열의 공통 도구. 좌표는 1280 x 720 기준이다
@@ -299,6 +351,11 @@ final class SlideLayouts {
 
 		abstract boolean list(Section s, int no);
 
+		// 그래프는 스튜디오 계열만 그린다. 다른 계열은 카드나 목록으로 바꾼다
+		boolean chart(Section s, int no) {
+			return false;
+		}
+
 		abstract void closing(Section s);
 
 		abstract void footer(String source, int page);
@@ -311,6 +368,7 @@ final class SlideLayouts {
 					case "process" -> process(s, no);
 					case "compare" -> compare(s, no);
 					case "statement" -> statement(s, no);
+					case "chart" -> chart(s, no);
 					default -> list(s, no);
 				};
 				if (fits) {
@@ -645,6 +703,73 @@ final class SlideLayouts {
 			return true;
 		}
 
+		// 그래프 장의 머리. 핵심 문장은 해석에 쓰므로 제목만 둔다
+		int chartHeader(Section s, int no) {
+			return header(new Section(s.layout(), s.title(), "", s.figure(), s.points()), no);
+		}
+
+		// 피그마 데이터 장. 항목별 가로 막대와 수치, 오른쪽 면에 해석을 둔다
+		@Override
+		boolean chart(Section s, int no) {
+			return bars(s, no, 160, 244, 384, 22, 656, t.accent(), t.accent(), t.onAccent(), t.onAccentSoft());
+		}
+
+		boolean bars(Section s, int no, int labelW, int barX, int barMax, int barH, int valueX, String bar,
+				String panel, String panelInk, String panelSoft) {
+			Series series = series(s);
+			if (series == null) {
+				return false;
+			}
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = chartHeader(s, no);
+			int n = s.points().size();
+			int row = Math.min(78, (616 - top) / n);
+			int panelX = valueX + 180;
+			int panelH = Math.min(340, 616 - top);
+			if (row < 56 || !panel(s, series, panelX, top + (616 - top - panelH) / 2, 1216 - panelX, panelH, panel,
+					panelInk, panelSoft)) {
+				return false;
+			}
+			int y = top + (616 - top - row * n) / 2;
+			for (int i = 0; i < n; i++) {
+				Point p = s.points().get(i);
+				int ry = y + i * row;
+				String value = fits(p.figure(), panelX - 24 - valueX, 16, "");
+				Fit label = fit(p.head(), labelW, 20, 14, 2, 400, false);
+				if (value.isEmpty() || label.lines() > 2 || label.height(1.5) > row - 8) {
+					return false;
+				}
+				put(64, ry, labelW, p.head(), label, 400, t.ink(), "left", 1.5, false);
+				rect(barX, ry + 4, Math.max(4, (int) Math.round(barMax * series.values()[i] / series.max())), barH, bar);
+				tx(valueX, ry, panelX - 24 - valueX, value, 20, 16, 1, 400, t.accentText(), "left", 1.5);
+			}
+			return true;
+		}
+
+		// 해석 면. 가장 큰 항목과 수치, 핵심 문장, 그 항목의 설명 순서로 쓰고 넘치면 설명을 뺀다
+		boolean panel(Section s, Series series, int x, int y, int w, int h, String fill, String ink, String soft) {
+			Point lead = s.points().get(series.lead());
+			String big = s.message().isEmpty() ? lead.head() : s.message();
+			int inner = w - 72;
+			Fit label = fit(lead.head() + "  " + lead.figure(), inner, 18, 14, 2, 600, false);
+			Fit head = fit(big, inner, 30, 20, 4, 600, false);
+			int headTop = y + 36 + label.height(1.44) + 24;
+			int bottom = y + h - 32;
+			if (label.lines() > 2 || head.lines() > 4 || headTop + head.height(1.4) > bottom) {
+				return false;
+			}
+			rect(x, y, w, h, fill);
+			put(x + 36, y + 36, inner, lead.head() + "  " + lead.figure(), label, 600, soft, "left", 1.44, false);
+			put(x + 36, headTop, inner, big, head, 600, ink, "left", 1.4, false);
+			Fit body = fit(lead.body(), inner, 20, 15, 4, 400, false);
+			int bodyTop = headTop + head.height(1.4) + 24;
+			if (!lead.body().isEmpty() && !big.equals(lead.body()) && body.lines() <= 4
+					&& bodyTop + body.height(1.5) <= bottom) {
+				put(x + 36, bodyTop, inner, lead.body(), body, 400, ink, "left", 1.5, false);
+			}
+			return true;
+		}
+
 		// 강조색 바탕에 큰 문장과 요점 단
 		@Override
 		void closing(Section s) {
@@ -869,6 +994,60 @@ final class SlideLayouts {
 			return true;
 		}
 
+		// 피그마 데이터 장. 왼쪽에 세로 막대, 오른쪽에 큰 수치와 해석을 둔다
+		@Override
+		boolean chart(Section s, int no) {
+			Series series = series(s);
+			if (series == null) {
+				return false;
+			}
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = chartHeader(s, no);
+			int n = s.points().size();
+			int slot = 800 / n;
+			int w = Math.min(134, slot - 48);
+			int base = 572;
+			int tallest = Math.min(300, base - 54 - top);
+			if (tallest < 140) {
+				return false;
+			}
+			for (int i = 0; i < n; i++) {
+				Point p = s.points().get(i);
+				String value = fits(p.figure(), slot - 8, 16, "");
+				Fit label = fit(p.head(), slot - 8, 20, 13, 2, 400, false);
+				if (value.isEmpty() || label.lines() > 2) {
+					return false;
+				}
+				int x = 64 + i * slot;
+				int h = Math.max(4, (int) Math.round(tallest * series.values()[i] / series.max()));
+				tx(x + 4, base - h - 54, slot - 8, value, 30, 16, 1, 600, t.ink(), "center", 1.4);
+				rect(x + (slot - w) / 2, base - h, w, h, t.accent());
+				put(x + 4, 584, slot - 8, p.head(), label, 400, t.muted(), "center", 1.5, false);
+			}
+			rect(64, 574, 800, 1, lineOn(t.bg()));
+			Point lead = s.points().get(series.lead());
+			String big = fits(s.figure(), 272, 56, fits(lead.figure(), 272, 56, ""));
+			String head = s.message().isEmpty() ? lead.head() : s.message();
+			int y = Math.max(260, top + 40);
+			int bigH = big.isEmpty() ? 0 : fit(big, 272, 100, 56, 1, 400, false).height(1.12) + 18;
+			Fit hf = fit(head, 272, 30, 20, 5, 600, false);
+			if (hf.lines() > 5 || y + bigH + hf.height(1.4) > 630) {
+				return false;
+			}
+			if (!big.isEmpty()) {
+				tx(944, y, 272, big, 100, 56, 1, 400, t.accentText(), "left", 1.12);
+				y += bigH;
+			}
+			put(944, y, 272, head, hf, 600, t.ink(), "left", 1.4, false);
+			y += hf.height(1.4) + 24;
+			Fit body = fit(lead.body(), 272, 20, 15, 5, 400, false);
+			if (!lead.body().isEmpty() && !head.equals(lead.body()) && body.lines() <= 5
+					&& y + body.height(1.5) <= 630) {
+				put(944, y, 272, lead.body(), body, 400, t.muted(), "left", 1.5, false);
+			}
+			return true;
+		}
+
 		@Override
 		void closing(Section s) {
 			closingOn(t.accent(), t.onAccent(), t.onAccentSoft(), "LET’S BUILD TOGETHER");
@@ -907,6 +1086,67 @@ final class SlideLayouts {
 				put(720, y + (row - 16 - f.height(1.4)) / 2, 496, titles.get(i), f, 600, t.ink(), "left", 1.4, false);
 				rect(600, y + row - 1, 616, 1, t.soft());
 			}
+		}
+
+		// 피그마 차트 장. 첫 항목의 비율을 고리로 그리고 오른쪽에 해석과 나머지 항목을 둔다
+		// 요소에 호 모양이 없어 도넛 대신 점 36개의 고리로 비율을 나타낸다
+		@Override
+		boolean chart(Section s, int no) {
+			Series series = series(s);
+			if (series == null || !series.unit().equals("%") || series.values()[0] > 100) {
+				return false;
+			}
+			rect(0, 0, WIDTH, HEIGHT, t.bg());
+			int top = chartHeader(s, no);
+			Point first = s.points().get(0);
+			int cx = 269;
+			int cy = Math.max(246, top + 24) + 175;
+			String value = fits(first.figure(), 250, 40, "");
+			Fit label = fit(first.head(), 192, 20, 14, 2, 400, false);
+			if (cy + 175 > 630 || value.isEmpty() || label.lines() > 2) {
+				return false;
+			}
+			int dots = 36;
+			long filled = Math.round(series.values()[0] * dots / 100);
+			for (int i = 0; i < dots; i++) {
+				double angle = -Math.PI / 2 + 2 * Math.PI * i / dots;
+				oval((int) Math.round(cx + 150 * Math.cos(angle)) - 12, (int) Math.round(cy + 150 * Math.sin(angle)) - 12,
+						24, 24, i < filled ? t.accent() : t.soft());
+			}
+			tx(cx - 125, cy - 59, 250, value, 80, 40, 1, 700, t.accentText(), "center", 1.08);
+			put(cx - 96, cy + 39, 192, first.head(), label, 400, t.ink(), "center", 1.5, false);
+
+			String big = s.message().isEmpty() ? first.head() : s.message();
+			List<Point> rest = s.points().subList(1, s.points().size());
+			Fit hf = fit(big, 620, 48, 30, 3, dweight(), true);
+			Fit bf = fit(first.body(), 620, 24, 16, 2, 400, false);
+			int y = Math.max(250, top + 24);
+			int rows = 32 + 1 + 24 + rest.size() * 40;
+			boolean body = !first.body().isEmpty() && !big.equals(first.body()) && bf.lines() <= 2
+					&& y + hf.height(1.29) + 24 + bf.height(1.5) + rows <= 630;
+			if (hf.lines() > 3 || y + hf.height(1.29) + rows > 630) {
+				return false;
+			}
+			put(580, y, 620, big, hf, dweight(), t.ink(), "left", 1.29, true);
+			y += hf.height(1.29);
+			if (body) {
+				put(580, y + 24, 620, first.body(), bf, 400, t.ink(), "left", 1.5, false);
+				y += 24 + bf.height(1.5);
+			}
+			y += 32;
+			rect(580, y, 620, 1, t.soft());
+			y += 24;
+			for (Point p : rest) {
+				String figure = fits(p.figure(), 160, 14, "");
+				Fit head = fit(p.head(), 440, 18, 14, 1, 600, false);
+				if (figure.isEmpty() || head.lines() > 1) {
+					return false;
+				}
+				put(580, y, 440, p.head(), head, 600, t.accentText(), "left", 1.44, false);
+				tx(1040, y, 160, figure, 20, 14, 1, 600, t.ink(), "right", 1.44);
+				y += 40;
+			}
+			return true;
 		}
 
 		// 위에 코랄 띠, 큰 문장, 아래 코발트 띠에 요점. 요점이 띠에 넘치면 공통 마무리를 쓴다
@@ -986,6 +1226,14 @@ final class SlideLayouts {
 			}
 			rect(640, top + heads + 36, 1, bodies + 44, lineOn(t.bg()));
 			return true;
+		}
+
+		// 피그마 차트 장. 포레스트 가로 막대와 노란 해석 면
+		// 항목마다 수치가 하나라 피그마의 도입 전후 두 막대 대신 한 막대로 그린다
+		@Override
+		boolean chart(Section s, int no) {
+			String ink = Theme.guard(t.accent(), 4.5, t.onAccent2(), t.accent2());
+			return bars(s, no, 150, 236, 432, 20, 692, t.accent(), t.accent2(), ink, ink);
 		}
 
 		@Override

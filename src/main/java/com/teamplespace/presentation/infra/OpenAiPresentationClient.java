@@ -36,6 +36,8 @@ public class OpenAiPresentationClient {
 			layout은 내용의 구조로 고르세요. 같은 배치를 세 장 이상 잇달아 쓰지 마세요.
 			cards는 무게가 비슷한 대등한 요소 2개에서 4개, list는 설명이 긴 요소 나열, process는 시간 순서가 있는 단계나 일정 3개에서 5개,
 			compare는 정확히 2개를 대조할 때(현재와 개선, 장점과 한계, 두 대안), statement는 수치 하나나 강한 주장 하나를 크게 보여 주고 근거 2개에서 3개를 둘 때 씁니다.
+			chart는 자료에 있는 같은 단위의 수치 2개에서 5개를 그래프로 비교할 때 씁니다. 모든 point의 figure에 64%, 312명처럼 숫자와 단위만 쓰고, message에는 그래프에서 읽을 해석을 쓰세요.
+			figure가 비거나 단위가 다른 point가 하나라도 있으면 chart를 쓰지 마세요.
 			자료의 핵심이 수치 하나면 statement를 고르고 그 수치를 figure에 넣으세요.
 			figure는 그 슬라이드의 핵심 수치나 시기를 짧게 쓰고, 각 point의 figure는 그 항목의 수치나 시기를 12자 이내로 씁니다. 자료에 근거한 값이 없으면 빈 문자열로 두세요.
 			figure는 배치에 따라 화면에 보이지 않으므로 수치를 figure에만 두지 말고 head나 body에도 직접 쓰세요.
@@ -66,7 +68,7 @@ public class OpenAiPresentationClient {
 			      "required":["item","layout","title","message","figure","points"],
 			      "properties":{
 			        "item":{"type":"integer"},
-			        "layout":{"type":"string","enum":["cards","list","process","compare","statement"]},
+			        "layout":{"type":"string","enum":["cards","list","process","compare","statement","chart"]},
 			        "title":{"type":"string"},
 			        "message":{"type":"string"},
 			        "figure":{"type":"string"},
