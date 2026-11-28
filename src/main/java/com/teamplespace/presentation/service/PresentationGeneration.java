@@ -63,7 +63,7 @@ public class PresentationGeneration implements JobHandler {
 	private static final Logger log = LoggerFactory.getLogger(PresentationGeneration.class);
 	static final String TYPE = "presentation_generation";
 	private static final int SCHEMA_VERSION = 1;
-	private static final String PROMPT_VERSION = "presentation-v5";
+	private static final String PROMPT_VERSION = "presentation-v6";
 	private static final Set<String> REQUEST_FIELDS = Set.of("outlineVersion", "designVersion", "sourceIds");
 	private static final Set<String> CLOSING_FIELDS = Set.of("layout", "title", "message", "figure", "points");
 	private static final Set<String> SLIDE_FIELDS = Set.of("item", "layout", "title", "message", "figure", "points");

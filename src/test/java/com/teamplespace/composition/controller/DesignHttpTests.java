@@ -81,7 +81,12 @@ class DesignHttpTests extends HttpIntegrationSupport {
 			assertThat(preview.get("templateVersion").asLong()).isEqualTo(template.get("version").asLong());
 			var layouts = new ArrayList<String>();
 			preview.get("slides").forEach(slide -> layouts.add(slide.get("layoutId").asString()));
-			assertThat(layouts).as(template.get("key").asString()).startsWith("title").endsWith("summary").hasSize(8);
+			// 스튜디오 템플릿은 비교 다음에 그래프 장이 들어간다
+			boolean studio = List.of("burgundy-editorial", "tech-pitch", "open-campus", "field-notes")
+				.contains(template.get("key").asString());
+			assertThat(layouts).as(template.get("key").asString()).startsWith("title").endsWith("summary")
+				.hasSize(studio ? 9 : 8);
+			assertThat(layouts.contains("chart")).isEqualTo(studio);
 		}
 		assertThat(new Browser().request("GET", "/templates/" + templates.get(0).get("id").asString() + "/preview",
 				null, 401).get("error").get("code").asString()).isEqualTo("UNAUTHENTICATED");
